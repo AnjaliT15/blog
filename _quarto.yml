@@ -1,0 +1,35 @@
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "Anjali's Notes"
+  site-url: https://anjalit15.github.io/blog
+  description: "Book reviews, reading notes, and control theory"
+  navbar:
+    left:
+      - href: index.html
+        text: All posts
+      - href: "index.html#category=Book%20reviews"
+        text: Book reviews
+      - href: "index.html#category=Reading%20notes"
+        text: Reading notes
+      - href: "index.html#category=Control%20theory"
+        text: Control theory
+    right:
+      - text: Home
+        href: https://anjalit15.github.io/
+      - about.qmd
+      - icon: github
+        href: https://github.com/anjalit15
+      - icon: rss
+        href: index.xml
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: true
+
+execute:
+  freeze: auto

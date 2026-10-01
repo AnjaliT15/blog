@@ -1,0 +1,19 @@
+---
+title: "Anjali"
+image: profile.jpg
+about:
+  template: jolla
+  links:
+    - icon: github
+      text: GitHub
+      href: https://github.com/anjalit15
+    - icon: house
+      text: Homepage
+      href: https://anjalit15.github.io/
+---
+
+I am a researcher working on control theory and machine learning.
+This blog collects my book reviews, notes on papers I read, and
+technical posts on control.
+
+About this blog
