@@ -3,7 +3,7 @@ project:
   output-dir: docs
 
 website:
-  title: "Anjali's Notes"
+  title: "Fathom"
   site-url: https://anjalit15.github.io/blog
   description: "Book reviews, reading notes, and control theory"
   navbar:
@@ -13,9 +13,9 @@ website:
       - href: "index.html#category=Book%20reviews"
         text: Book reviews
       - href: "index.html#category=Reading%20notes"
-        text: Reading notes
+        text: Ideas and Evidence
       - href: "index.html#category=Control%20theory"
-        text: Control theory
+        text: Reseach in Control
     right:
       - text: Home
         href: https://anjalit15.github.io/
@@ -27,7 +27,7 @@ website:
 
 format:
   html:
-    theme: cosmo
+    theme: [cosmo, custom.scss]
     css: styles.css
     toc: true
 
