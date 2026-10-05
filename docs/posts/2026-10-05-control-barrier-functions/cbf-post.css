@@ -1,0 +1,57 @@
+/* Styles for the control-barrier-functions post.
+   Only the blocks the post introduces: callouts, figures, tables, diagrams.
+   Fonts, colours and page layout are left to the site theme. */
+
+.def, .warn, .note {
+  margin: 1.4rem 0;
+  padding: 0.85rem 1.1rem;
+  font-size: 0.97em;
+  line-height: 1.55;
+}
+.def  { border-left: 3px solid #1F6F5C; background: #EEF4F2; }
+.warn { border-left: 3px solid #A43326; background: #F7EEEC; }
+.note { border-left: 3px solid #B9C5CC; background: transparent; }
+.def .tag, .warn .tag {
+  display: block; margin-bottom: 0.35rem;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.72em; letter-spacing: 0.06em;
+}
+.def .tag  { color: #1F6F5C; }
+.warn .tag { color: #A43326; }
+
+figure {
+  margin: 2rem 0;
+  background: #fff;
+  border: 1px solid #B9C5CC;
+  padding: 0.6rem;
+}
+figure img { display: block; width: 100%; height: auto; }
+figcaption {
+  font-size: 0.86em; line-height: 1.5; color: #3c4c57;
+  padding: 0.65rem 0.5rem 0.3rem; text-align: left;
+}
+.fignum {
+  display: inline-block; margin-right: 0.5rem;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.8em; color: #2C5F8E;
+}
+
+.diagram { margin: 2rem 0; }
+.diagram svg {
+  width: 100%; height: auto; display: block;
+  background: #fff; border: 1px solid #B9C5CC;
+}
+.dcap { font-size: 0.86em; color: #3c4c57; padding: 0.6rem 0.2rem; }
+
+table { border-collapse: collapse; width: 100%; margin: 1.6rem 0; font-size: 0.88em; }
+th, td { text-align: left; vertical-align: top; padding: 0.5rem 0.6rem;
+         border-bottom: 1px solid #B9C5CC; }
+th { border-bottom: 1.5px solid #17222B; font-size: 0.86em; color: #3c4c57; }
+td.k { font-weight: 600; white-space: nowrap; }
+
+ol.refs { font-size: 0.92em; }
+ol.refs li { margin: 0.55rem 0; }
+
+@media (max-width: 700px) {
+  table { display: block; overflow-x: auto; }
+}

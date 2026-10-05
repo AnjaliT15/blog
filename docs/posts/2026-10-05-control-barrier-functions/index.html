@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Anjali">
+<meta name="dcterms.date" content="2026-10-05">
+<meta name="description" content="How safety becomes a constraint you can solve for at every control step — the theory, twelve worked simulations, a taxonomy of the variants, and how barriers are combined with reinforcement learning and data-driven control.">
+
+<title>Control barrier functions: theory, variants, and learning-based extensions – Fathom</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+</style>
+
+
+<script src="../../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../../">
+<script src="../../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../../site_libs/quarto-html/popper.min.js"></script>
+<script src="../../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../../site_libs/bootstrap/bootstrap-c9e47c171f4e0c7d588e112fd72a0199.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="cbf-post.css">
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../../index.html">
+    <span class="navbar-title">Fathom</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../../index.html"> 
+<span class="menu-text">All posts</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../index.html#category=Book reviews"> 
+<span class="menu-text">Book reviews</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../index.html#category=Reading notes"> 
+<span class="menu-text">Ideas and Evidence</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../index.html#category=Control theory"> 
+<span class="menu-text">Reseach in Control</span></a>
+  </li>  
+</ul>
+            <ul class="navbar-nav navbar-nav-scroll ms-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="https://anjalit15.github.io/"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../../about.html"> 
+<span class="menu-text">Anjali</span></a>
+  </li>  
+  <li class="nav-item compact">
+    <a class="nav-link" href="https://github.com/anjalit15"> <i class="bi bi-github" role="img">
+</i> 
+<span class="menu-text"></span></a>
+  </li>  
+  <li class="nav-item compact">
+    <a class="nav-link" href="../../index.xml"> <i class="bi bi-rss" role="img">
+</i> 
+<span class="menu-text"></span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Contents</h2>
+   
+  <ul>
+  <li><a href="#safety-as-set-invariance" id="toc-safety-as-set-invariance" class="nav-link active" data-scroll-target="#safety-as-set-invariance">1. Safety as set invariance</a></li>
+  <li><a href="#the-mathematical-core" id="toc-the-mathematical-core" class="nav-link" data-scroll-target="#the-mathematical-core">2. The mathematical core</a>
+  <ul class="collapse">
+  <li><a href="#the-safety-filter" id="toc-the-safety-filter" class="nav-link" data-scroll-target="#the-safety-filter">The safety filter</a></li>
+  <li><a href="#adding-performance-the-clf-cbf-qp" id="toc-adding-performance-the-clf-cbf-qp" class="nav-link" data-scroll-target="#adding-performance-the-clf-cbf-qp">Adding performance: the CLF-CBF-QP</a></li>
+  </ul></li>
+  <li><a href="#the-filter-in-action" id="toc-the-filter-in-action" class="nav-link" data-scroll-target="#the-filter-in-action">3. The filter in action</a>
+  <ul class="collapse">
+  <li><a href="#the-class-mathcalk-function-is-a-design-decision-not-a-formality" id="toc-the-class-mathcalk-function-is-a-design-decision-not-a-formality" class="nav-link" data-scroll-target="#the-class-mathcalk-function-is-a-design-decision-not-a-formality">The class-<span class="math inline">\(\mathcal{K}\)</span> function is a design decision, not a formality</a></li>
+  <li><a href="#a-canonical-benchmark-adaptive-cruise-control" id="toc-a-canonical-benchmark-adaptive-cruise-control" class="nav-link" data-scroll-target="#a-canonical-benchmark-adaptive-cruise-control">A canonical benchmark: adaptive cruise control</a></li>
+  </ul></li>
+  <li><a href="#relative-degree-and-high-order-cbfs" id="toc-relative-degree-and-high-order-cbfs" class="nav-link" data-scroll-target="#relative-degree-and-high-order-cbfs">4. Relative degree and high-order CBFs</a></li>
+  <li><a href="#where-the-guarantee-quietly-fails" id="toc-where-the-guarantee-quietly-fails" class="nav-link" data-scroll-target="#where-the-guarantee-quietly-fails">5. Where the guarantee quietly fails</a>
+  <ul class="collapse">
+  <li><a href="#model-error-and-disturbances" id="toc-model-error-and-disturbances" class="nav-link" data-scroll-target="#model-error-and-disturbances">5.1 Model error and disturbances</a></li>
+  <li><a href="#input-limits-and-pointwise-feasibility" id="toc-input-limits-and-pointwise-feasibility" class="nav-link" data-scroll-target="#input-limits-and-pointwise-feasibility">5.2 Input limits and pointwise feasibility</a></li>
+  <li><a href="#undesired-equilibria-and-deadlock" id="toc-undesired-equilibria-and-deadlock" class="nav-link" data-scroll-target="#undesired-equilibria-and-deadlock">5.3 Undesired equilibria and deadlock</a></li>
+  <li><a href="#sampled-data-zero-order-hold-and-estimated-state" id="toc-sampled-data-zero-order-hold-and-estimated-state" class="nav-link" data-scroll-target="#sampled-data-zero-order-hold-and-estimated-state">5.4 Sampled data, zero-order hold, and estimated state</a></li>
+  </ul></li>
+  <li><a href="#how-the-family-is-organised" id="toc-how-the-family-is-organised" class="nav-link" data-scroll-target="#how-the-family-is-organised">6. How the family is organised</a></li>
+  <li><a href="#the-variants-one-axis-at-a-time" id="toc-the-variants-one-axis-at-a-time" class="nav-link" data-scroll-target="#the-variants-one-axis-at-a-time">7. The variants, one axis at a time</a>
+  <ul class="collapse">
+  <li><a href="#dynamics-discrete-time-sampled-data-stochastic" id="toc-dynamics-discrete-time-sampled-data-stochastic" class="nav-link" data-scroll-target="#dynamics-discrete-time-sampled-data-stochastic">7.1 Dynamics: discrete-time, sampled-data, stochastic</a></li>
+  <li><a href="#input-channel-high-order-input-constrained-backup-non-smooth" id="toc-input-channel-high-order-input-constrained-backup-non-smooth" class="nav-link" data-scroll-target="#input-channel-high-order-input-constrained-backup-non-smooth">7.2 Input channel: high-order, input-constrained, backup, non-smooth</a></li>
+  <li><a href="#uncertainty-robust-issf-risk-aware" id="toc-uncertainty-robust-issf-risk-aware" class="nav-link" data-scroll-target="#uncertainty-robust-issf-risk-aware">7.3 Uncertainty: robust, ISSf, risk-aware</a></li>
+  <li><a href="#adaptation-and-parameter-tuning" id="toc-adaptation-and-parameter-tuning" class="nav-link" data-scroll-target="#adaptation-and-parameter-tuning">7.4 Adaptation and parameter tuning</a></li>
+  <li><a href="#multi-agent-and-graph-cbfs" id="toc-multi-agent-and-graph-cbfs" class="nav-link" data-scroll-target="#multi-agent-and-graph-cbfs">7.5 Multi-agent and graph CBFs</a></li>
+  <li><a href="#adversarial-and-non-cooperative-settings" id="toc-adversarial-and-non-cooperative-settings" class="nav-link" data-scroll-target="#adversarial-and-non-cooperative-settings">7.6 Adversarial and non-cooperative settings</a></li>
+  <li><a href="#measurement-robust-cbfs-and-perception-in-the-loop" id="toc-measurement-robust-cbfs-and-perception-in-the-loop" class="nav-link" data-scroll-target="#measurement-robust-cbfs-and-perception-in-the-loop">7.7 Measurement-robust CBFs and perception in the loop</a></li>
+  <li><a href="#beyond-state-constraints-time-logic-and-prediction" id="toc-beyond-state-constraints-time-logic-and-prediction" class="nav-link" data-scroll-target="#beyond-state-constraints-time-logic-and-prediction">7.8 Beyond state constraints: time, logic, and prediction</a></li>
+  </ul></li>
+  <li><a href="#cbfs-with-reinforcement-learning-and-data-driven-control" id="toc-cbfs-with-reinforcement-learning-and-data-driven-control" class="nav-link" data-scroll-target="#cbfs-with-reinforcement-learning-and-data-driven-control">8. CBFs with reinforcement learning and data-driven control</a>
+  <ul class="collapse">
+  <li><a href="#learning-the-safe-set" id="toc-learning-the-safe-set" class="nav-link" data-scroll-target="#learning-the-safe-set">8.1 Learning the safe set</a></li>
+  <li><a href="#learning-the-dynamics-the-barrier-needs" id="toc-learning-the-dynamics-the-barrier-needs" class="nav-link" data-scroll-target="#learning-the-dynamics-the-barrier-needs">8.2 Learning the dynamics the barrier needs</a></li>
+  <li><a href="#filtering-reinforcement-learning" id="toc-filtering-reinforcement-learning" class="nav-link" data-scroll-target="#filtering-reinforcement-learning">8.3 Filtering reinforcement learning</a></li>
+  <li><a href="#making-the-filter-part-of-the-policy" id="toc-making-the-filter-part-of-the-policy" class="nav-link" data-scroll-target="#making-the-filter-part-of-the-policy">8.4 Making the filter part of the policy</a></li>
+  <li><a href="#neural-cbfs-and-why-verification-is-the-whole-game" id="toc-neural-cbfs-and-why-verification-is-the-whole-game" class="nav-link" data-scroll-target="#neural-cbfs-and-why-verification-is-the-whole-game">8.5 Neural CBFs and why verification is the whole game</a></li>
+  <li><a href="#filtering-generative-and-foundation-model-policies" id="toc-filtering-generative-and-foundation-model-policies" class="nav-link" data-scroll-target="#filtering-generative-and-foundation-model-policies">8.6 Filtering generative and foundation-model policies</a></li>
+  </ul></li>
+  <li><a href="#a-checklist-for-deployment" id="toc-a-checklist-for-deployment" class="nav-link" data-scroll-target="#a-checklist-for-deployment">9. A checklist for deployment</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">10. References</a>
+  <ul class="collapse">
+  <li><a href="#foundations-and-surveys" id="toc-foundations-and-surveys" class="nav-link" data-scroll-target="#foundations-and-surveys">Foundations and surveys</a></li>
+  <li><a href="#relative-degree-discrete-time-feasibility" id="toc-relative-degree-discrete-time-feasibility" class="nav-link" data-scroll-target="#relative-degree-discrete-time-feasibility">Relative degree, discrete time, feasibility</a></li>
+  <li><a href="#uncertainty-robustness-perception" id="toc-uncertainty-robustness-perception" class="nav-link" data-scroll-target="#uncertainty-robustness-perception">Uncertainty, robustness, perception</a></li>
+  <li><a href="#multi-agent-and-graph-cbfs-1" id="toc-multi-agent-and-graph-cbfs-1" class="nav-link" data-scroll-target="#multi-agent-and-graph-cbfs-1">Multi-agent and graph CBFs</a></li>
+  <li><a href="#learning-rl-and-verification" id="toc-learning-rl-and-verification" class="nav-link" data-scroll-target="#learning-rl-and-verification">Learning, RL, and verification</a></li>
+  <li><a href="#generative-and-foundation-model-policies-20252026" id="toc-generative-and-foundation-model-policies-20252026" class="nav-link" data-scroll-target="#generative-and-foundation-model-policies-20252026">Generative and foundation-model policies (2025–2026)</a></li>
+  </ul></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Control barrier functions: theory, variants, and learning-based extensions</h1>
+  <div class="quarto-categories">
+    <div class="quarto-category">Control theory</div>
+  </div>
+  </div>
+
+<div>
+  <div class="description">
+    <p>How safety becomes a constraint you can solve for at every control step — the theory, twelve worked simulations, a taxonomy of the variants, and how barriers are combined with reinforcement learning and data-driven control.</p>
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Anjali </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">October 5, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p><em>Everything below is reproducible. The simulation code, the figure scripts and a PyTorch reference for the learning-based sections are in a companion repository: <a href="https://github.com/anjalit15/control-barrier-functions">github.com/anjalit15/control-barrier-functions</a>.</em></p>
+<section id="safety-as-set-invariance" class="level2">
+<h2 class="anchored" data-anchor-id="safety-as-set-invariance">1. Safety as set invariance</h2>
+<p>Most safety requirements in control are not statements about stability, tracking error, or optimality. They are statements about a <em>set</em>: the quadrotor stays inside the flight volume, the manipulator’s elbow stays out of the human’s workspace, the car keeps a time headway, the battery stays under temperature. Formally, given a closed set <span class="math inline">\(\mathcal{C} \subset \mathbb{R}^n\)</span> of acceptable states, the system is safe if</p>
+<p><span class="math display">\[x(0) \in \mathcal{C} \;\Longrightarrow\; x(t) \in \mathcal{C} \quad \forall t \geq 0,\]</span></p>
+<p>a property called <strong>forward invariance</strong>. Nagumo’s theorem tells us what this costs locally: for a set described by a smooth function <span class="math inline">\(h\)</span> as <span class="math inline">\(\mathcal{C} = \{x : h(x) \geq 0\}\)</span>, invariance requires only that on the boundary the vector field never points out of the set, <span class="math inline">\(\nabla h(x)\cdot \dot x \geq 0\)</span> whenever <span class="math inline">\(h(x) = 0\)</span>. Nothing is asked in the interior. This is the entire geometric content of the theory, and it is worth internalising before any algebra (Figure 1, left).</p>
+<p>A control barrier function turns that boundary condition into a constraint on the <em>input</em>, and then — crucially — relaxes it so that it holds everywhere rather than only on the boundary, which is what makes it usable inside an optimisation solved at every control step.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figs/fig01_forward_invariance.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 1.</strong> Left: a safe set as the zero-superlevel set of <span class="math inline">\(h\)</span>, with level sets of <span class="math inline">\(h\)</span> inside it. On the boundary, admissible closed-loop vector fields are those with a non-negative component along <span class="math inline">\(\nabla h\)</span> (green normals). Right: the consequence of the CBF inequality <span class="math inline">\(\dot h \geq -\gamma h\)</span> — the barrier may decay, but only as slowly as <span class="math inline">\(h(0)e^{-\gamma t}\)</span>, so it can approach zero asymptotically and never cross it.</figcaption>
+</figure>
+</div>
+<p>Two things about the right-hand panel are worth dwelling on, because they are the most common sources of confusion. First, the CBF condition does <em>not</em> say <span class="math inline">\(h\)</span> must increase; it says <span class="math inline">\(h\)</span> may decrease at a rate that vanishes as <span class="math inline">\(h \to 0\)</span>. Second, the guarantee is about <span class="math inline">\(h\)</span>, not about distance: a trajectory can ride the boundary of the safe set for ever, perfectly safe and entirely useless. Safety and liveness are separate properties, and CBFs address exactly one of them.</p>
+</section>
+<section id="the-mathematical-core" class="level2">
+<h2 class="anchored" data-anchor-id="the-mathematical-core">2. The mathematical core</h2>
+<p>Take a control-affine system, which covers most mechanical, vehicular and electrical plants after a change of variables:</p>
+<p><span class="math display">\[\dot x = f(x) + g(x)\,u, \qquad x \in \mathbb{R}^n,\; u \in \mathcal{U} \subseteq \mathbb{R}^m,\]</span></p>
+<p>with <span class="math inline">\(f, g\)</span> locally Lipschitz. Write <span class="math inline">\(\mathcal{C} = \{x : h(x) \geq 0\}\)</span> for a continuously differentiable <span class="math inline">\(h\)</span> with <span class="math inline">\(0\)</span> a regular value (i.e.&nbsp;<span class="math inline">\(\nabla h(x) \neq 0\)</span> on <span class="math inline">\(\partial\mathcal{C}\)</span>, which rules out degenerate level sets).</p>
+<div class="def">
+<p><span class="tag">DEFINITION — class-K</span></p>
+<p>A continuous function <span class="math inline">\(\alpha : (-b, a) \to \mathbb{R}\)</span> is an <strong>extended class-<span class="math inline">\(\mathcal{K}\)</span></strong> function if it is strictly increasing and <span class="math inline">\(\alpha(0) = 0\)</span>. Typical choices: <span class="math inline">\(\alpha(s) = \gamma s\)</span>, <span class="math inline">\(\gamma s^3\)</span>, or <span class="math inline">\(\gamma\,\mathrm{sgn}(s)\sqrt{|s|}\)</span>.</p>
+</div>
+<div class="def">
+<p><span class="tag">DEFINITION — control barrier function</span></p>
+<p><span class="math inline">\(h\)</span> is a <strong>control barrier function</strong> for the system on <span class="math inline">\(\mathcal{C}\)</span> if there exists an extended class-<span class="math inline">\(\mathcal{K}\)</span> function <span class="math inline">\(\alpha\)</span> such that</p>
+<p><span class="math display">\[\sup_{u \in \mathcal{U}} \big[\underbrace{L_f h(x)}_{\nabla h\cdot f} + \underbrace{L_g h(x)}_{\nabla h\cdot g}\,u\big] \;\geq\; -\alpha\big(h(x)\big) \qquad \forall x \in \mathcal{D} \supseteq \mathcal{C}.\]</span></p>
+</div>
+<div class="def">
+<p><span class="tag">THEOREM — Ames, Xu, Grizzle &amp; Tabuada (2017)</span></p>
+<p>If <span class="math inline">\(h\)</span> is a CBF on <span class="math inline">\(\mathcal{C}\)</span>, then <em>any</em> locally Lipschitz feedback <span class="math inline">\(u(x)\)</span> taking values in</p>
+<p><span class="math display">\[K_{\mathrm{cbf}}(x) = \{u \in \mathcal{U} : L_f h(x) + L_g h(x) u \geq -\alpha(h(x))\}\]</span></p>
+<p>renders <span class="math inline">\(\mathcal{C}\)</span> forward invariant. Moreover <span class="math inline">\(\mathcal{C}\)</span> is <em>asymptotically stable</em> in <span class="math inline">\(\mathcal{D}\)</span>: states starting outside <span class="math inline">\(\mathcal{C}\)</span> but inside <span class="math inline">\(\mathcal{D}\)</span> are driven back to it.</p>
+</div>
+<p>The asymptotic-stability half of that statement is the practical reason the relaxed (so-called <em>zeroing</em>) formulation won out over earlier reciprocal barriers that blow up at the boundary: a real system perturbed slightly outside <span class="math inline">\(\mathcal{C}\)</span> by noise or a discretisation artefact is pulled back rather than being handed an infinite control demand.</p>
+<section id="the-safety-filter" class="level3">
+<h3 class="anchored" data-anchor-id="the-safety-filter">The safety filter</h3>
+<p>Because the condition is affine in <span class="math inline">\(u\)</span> for fixed <span class="math inline">\(x\)</span>, enforcing it while staying close to whatever controller was already there is a quadratic program with one inequality per barrier:</p>
+<p><span class="math display">\[u^\star(x) = \arg\min_{u \in \mathcal{U}} \; \|u - u_{\mathrm{nom}}(x)\|_W^2 \quad \text{s.t.} \quad L_f h(x) + L_g h(x) u \geq -\alpha(h(x)).\]</span></p>
+<p>This is the <strong>CBF-QP</strong>, and it is the reason CBFs are deployed so widely: it is a tiny convex problem, solvable at kilohertz rates, and it is agnostic about where <span class="math inline">\(u_{\mathrm{nom}}\)</span> came from — a hand-tuned PD loop, an MPC, a reinforcement-learning policy, or a vision-language-action model. The filter is <em>minimally invasive</em>: when the nominal input already satisfies the constraint, the filter is inactive and returns it untouched.</p>
+<div class="note">
+<p>A dual view worth knowing: with a single constraint the QP has the closed-form solution <span class="math inline">\(u^\star = u_{\mathrm{nom}} + L_gh^\top
+\frac{\max(0,\,-(L_fh + L_gh\,u_{\mathrm{nom}} + \alpha(h)))}{\|L_gh\|^2}\)</span> — a projection onto a half-space. This is what makes differentiable CBF layers cheap inside a neural policy (Section 8.4), and closed-form filters are an active topic in their own right for resource-constrained hardware.</p>
+</div>
+</section>
+<section id="adding-performance-the-clf-cbf-qp" class="level3">
+<h3 class="anchored" data-anchor-id="adding-performance-the-clf-cbf-qp">Adding performance: the CLF-CBF-QP</h3>
+<p>If the nominal controller is itself to be synthesised, a control Lyapunov function <span class="math inline">\(V\)</span> can be stacked into the same QP as a <em>soft</em> constraint with slack <span class="math inline">\(\delta\)</span>, keeping safety hard and stability negotiable:</p>
+<p><span class="math display">\[\min_{u,\delta} \; \|u\|^2 + p\,\delta^2 \quad \text{s.t.} \quad L_fV + L_gV\,u \leq -\lambda V + \delta, \qquad L_fh + L_gh\,u \geq -\alpha(h).\]</span></p>
+<p>The asymmetry is deliberate and is the standard engineering posture: never let a performance objective make a safety constraint infeasible.</p>
+</section>
+</section>
+<section id="the-filter-in-action" class="level2">
+<h2 class="anchored" data-anchor-id="the-filter-in-action">3. The filter in action</h2>
+<div class="diagram">
+<svg viewbox="0 0 980 190" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="A nominal controller is projected onto the set of safe inputs">
+  <defs>
+    <marker id="ar" markerwidth="9" markerheight="9" refx="7" refy="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#17222B"></path></marker>
+  </defs>
+  <g font-family="Iowan Old Style,Georgia,serif" fill="#17222B">
+    <rect x="8" y="52" width="150" height="52" fill="#fff" stroke="#B9C5CC"></rect>
+    <text x="83" y="74" font-size="14" text-anchor="middle">task controller</text>
+    <text x="83" y="93" font-size="13" text-anchor="middle" fill="#8C99A3">RL, MPC, PD, VLA</text>
+    <line x1="158" y1="78" x2="212" y2="78" stroke="#17222B" marker-end="url(#ar)"></line>
+    <text x="185" y="68" font-size="12.5" text-anchor="middle" fill="#8C99A3">u_nom</text>
+
+    <rect x="212" y="38" width="196" height="80" fill="#EEF4F2" stroke="#1F6F5C"></rect>
+    <text x="310" y="63" font-size="14" text-anchor="middle">safety filter</text>
+    <text x="310" y="84" font-size="13.5" text-anchor="middle" font-style="italic">
+      min ‖u − u_nom‖²</text>
+    <text x="310" y="103" font-size="13" text-anchor="middle" fill="#1F6F5C">
+      s.t. ḣ ≥ −α(h),  u ∈ U</text>
+    <line x1="408" y1="78" x2="462" y2="78" stroke="#17222B" marker-end="url(#ar)"></line>
+    <text x="435" y="68" font-size="12.5" text-anchor="middle" fill="#2C5F8E">u*</text>
+
+    <rect x="462" y="52" width="120" height="52" fill="#fff" stroke="#B9C5CC"></rect>
+    <text x="522" y="82" font-size="14" text-anchor="middle">plant</text>
+    <path d="M582,78 L640,78" stroke="#17222B" marker-end="url(#ar)"></path>
+    <path d="M612,78 L612,150 L120,150 L120,104" fill="none" stroke="#B9C5CC" stroke-dasharray="4 3" marker-end="url(#ar)"></path>
+    <text x="366" y="145" font-size="12" fill="#8C99A3">state / estimate x̂</text>
+
+    <circle cx="790" cy="78" r="46" fill="#A43326" fill-opacity="0.14" stroke="#A43326"></circle>
+    <text x="790" y="82" font-size="12.5" text-anchor="middle" fill="#A43326">h &lt; 0</text>
+    <path d="M660,140 C700,140 742,126 762,104" fill="none" stroke="#8C99A3" stroke-dasharray="5 3" stroke-width="2"></path>
+    <path d="M660,140 C706,138 742,110 752,44 C790,20 840,30 880,52" fill="none" stroke="#2C5F8E" stroke-width="2.2"></path>
+    <text x="884" y="70" font-size="12.5" fill="#2C5F8E">safe</text>
+    <text x="700" y="122" font-size="12.5" fill="#8C99A3">nominal</text>
+  </g>
+</svg>
+<div class="dcap">The architecture in one line: the
+safety filter sits between whatever produces the nominal input and the actuator,
+and is indifferent to what that producer is.</div></div>
+<div class="note">
+<p>Every figure below is the output of a simulation rather than an illustration. The code behind all of them — a small CBF toolbox, the twelve experiments, and a PyTorch reference for the learning-based sections — is in the companion repository linked at the top of this post.</p>
+</div>
+<p>Figure 2 dissects one step of the QP on a velocity-controlled robot with a circular keep-out zone, <span class="math inline">\(h(p) = \|p - c\| - r\)</span>. The right-hand middle panel is the one to study: at each instant the CBF condition cuts input space with a half-plane, the actuator limits cut it with a box, and the filter returns the point of the intersection closest to <span class="math inline">\(u_{\mathrm{nom}}\)</span>.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figs/fig03_cbf_qp_filter.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 2.</strong> Anatomy of a CBF-QP. Left: the nominal go-to-goal controller drives straight through the obstacle; the filtered controller does not. Middle: input space at the instant of largest intervention, showing the admissible set <span class="math inline">\(K_{\mathrm{cbf}}(x)\)</span> (green), the actuator box <span class="math inline">\(\mathcal{U}\)</span> (dotted), and the projection of <span class="math inline">\(u_{\mathrm{nom}}\)</span> onto it. Right: the correction is zero until it is needed, and the barrier stays non-negative where the unfiltered loop reaches <span class="math inline">\(h \approx -0.9\)</span> m.</figcaption>
+</figure>
+</div>
+<section id="the-class-mathcalk-function-is-a-design-decision-not-a-formality" class="level3">
+<h3 class="anchored" data-anchor-id="the-class-mathcalk-function-is-a-design-decision-not-a-formality">The class-<span class="math inline">\(\mathcal{K}\)</span> function is a design decision, not a formality</h3>
+<p>Every CBF condition hides a tuning knob whose effect is larger than most practitioners expect. A small gain makes the constraint bite early and far from the boundary, producing wide, cautious detours; a large gain lets the system approach at speed and brake late, hugging <span class="math inline">\(\partial\mathcal{C}\)</span>. The same barrier and the same plant therefore give qualitatively different behaviour (Figure 3).</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figs/fig02_class_k.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 3.</strong> One plant, one barrier, three class-<span class="math inline">\(\mathcal{K}\)</span> functions. The cautious linear gain (blue) begins intervening at <span class="math inline">\(t \approx 0.5\)</span> s and keeps a visible margin; the aggressive gain (gold) intervenes late and rides <span class="math inline">\(h \approx 0\)</span>; the cubic choice is permissive far from the boundary and firm near it. All three are provably safe — they differ only in conservatism.</figcaption>
+</figure>
+</div>
+<p>A large literature exists purely on choosing and adapting this function: adaptive CBFs make <span class="math inline">\(\alpha\)</span> state- or time-dependent, penalty and optimal-decay formulations solve for it inside the QP, and learning-based schemes tune it from data (Sections 7.4 and 8.4). If a CBF deployment feels either paralysed or reckless, this is the first thing to inspect.</p>
+</section>
+<section id="a-canonical-benchmark-adaptive-cruise-control" class="level3">
+<h3 class="anchored" data-anchor-id="a-canonical-benchmark-adaptive-cruise-control">A canonical benchmark: adaptive cruise control</h3>
+<p>The example that launched much of this literature is worth reproducing because it exercises everything at once: nontrivial drift dynamics, a hard actuator bound, a performance objective in direct conflict with safety, and a barrier with clear physical meaning. With ego speed <span class="math inline">\(v\)</span>, headway <span class="math inline">\(z\)</span> to a lead vehicle, and rolling resistance <span class="math inline">\(F_r(v) = f_0 + f_1 v + f_2 v^2\)</span>,</p>
+<p><span class="math display">\[\dot v = \frac{-F_r(v) + u}{m}, \qquad \dot z = v_{\mathrm{lead}} - v, \qquad h(x) = z - \tau v, \quad \tau = 1.8\ \mathrm{s}.\]</span></p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figs/fig04_acc.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 4.</strong> Adaptive cruise control with <span class="math inline">\(m=1650\)</span> kg, a <span class="math inline">\(\pm 0.3g\)</span> wheel-force limit, desired speed 24 m/s and a lead vehicle at 13.9 m/s. The cruise controller alone tracks <span class="math inline">\(v_d\)</span> and collides (dashed headway crosses zero). The CBF-QP tracks <span class="math inline">\(v_d\)</span> until the 1.8 s headway constraint activates at <span class="math inline">\(t \approx 6\)</span> s, brakes hard against the actuator limit, and settles exactly on the constraint boundary with the lead vehicle’s speed.</figcaption>
+</figure>
+</div>
+<p>Note the shape of the filtered wheel-force trace: the filter does nothing for six seconds, saturates the actuator for about two, then hands control back. That signature — long idle, brief decisive intervention — is what a healthy safety filter looks like in logs, and its absence is diagnostic (Section 9).</p>
+</section>
+</section>
+<section id="relative-degree-and-high-order-cbfs" class="level2">
+<h2 class="anchored" data-anchor-id="relative-degree-and-high-order-cbfs">4. Relative degree and high-order CBFs</h2>
+<p>The definition above quietly assumes <span class="math inline">\(L_g h(x) \neq 0\)</span>: the input must appear in <span class="math inline">\(\dot h\)</span>. It very often does not. Position constraints on a mechanical system are the standard case — for a double integrator <span class="math inline">\(\ddot p = u\)</span> with <span class="math inline">\(h_0(p) = \|p - c\|^2 - r^2\)</span>, we get <span class="math inline">\(L_g h_0 \equiv 0\)</span>, and the CBF-QP becomes vacuous: no choice of <span class="math inline">\(u\)</span> affects the constraint, so the filter is structurally incapable of enforcing anything. It will report feasibility right up to the collision (Figure 5, dashed).</p>
+<p>The fix is to differentiate until the input appears, enforcing a chain of conditions. With <span class="math inline">\(\psi_0 = h_0\)</span> and</p>
+<p><span class="math display">\[\psi_i(x) = \dot\psi_{i-1}(x) + \alpha_i\big(\psi_{i-1}(x)\big), \qquad i = 1,\dots,q,\]</span></p>
+<p>where <span class="math inline">\(q\)</span> is the relative degree, the requirement <span class="math inline">\(\psi_q \geq 0\)</span> is affine in <span class="math inline">\(u\)</span> and the <strong>high-order CBF</strong> (HOCBF) of Xiao and Belta renders the intersection <span class="math inline">\(\bigcap_i \{\psi_i \geq 0\}\)</span> forward invariant. The exponential CBF of Nguyen and Sreenath is the special case with linear <span class="math inline">\(\alpha_i\)</span>, where the gains are chosen by placing the poles of a linear system in <span class="math inline">\(\psi\)</span>.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figs/fig05_hocbf.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 5.</strong> Relative degree 2. Dashed: applying the first-order condition to <span class="math inline">\(h_0\)</span> directly — <span class="math inline">\(L_gh_0 \equiv 0\)</span>, so the QP cannot act and the trajectory passes through the obstacle (<span class="math inline">\(h_0\)</span> reaches <span class="math inline">\(-1\)</span>). Solid: the HOCBF chain with <span class="math inline">\(\psi_1 = \dot h_0 + \alpha_1(h_0)\)</span> brakes in time, keeps <span class="math inline">\(h_0 \geq 0\)</span>, and still reaches the goal. Bottom right: the second-level function <span class="math inline">\(\psi_1\)</span> remains non-negative, which is what the theorem actually certifies.</figcaption>
+</figure>
+</div>
+<div class="warn">
+<p><span class="tag">PITFALL</span></p>
+<p>The HOCBF certifies invariance of the <em>intersection</em> of the level sets, not of <span class="math inline">\(\mathcal{C}\)</span> alone. Initial states in <span class="math inline">\(\mathcal{C}\)</span> with <span class="math inline">\(\psi_1 &lt; 0\)</span> — physically, already moving too fast toward the obstacle to stop — are outside the certified set, and no controller could save them under the input limits. Checking <span class="math inline">\(\psi_i(x_0) \geq 0\)</span> for all <span class="math inline">\(i\)</span> at initialisation is not optional.</p>
+</div>
+</section>
+<section id="where-the-guarantee-quietly-fails" class="level2">
+<h2 class="anchored" data-anchor-id="where-the-guarantee-quietly-fails">5. Where the guarantee quietly fails</h2>
+<p>The CBF theorem is airtight; deployments still fail, because the theorem’s hypotheses are stronger than they look. The four failure modes below account for the large majority of practical trouble, and the recent literature is largely organised around them.</p>
+<section id="model-error-and-disturbances" class="level3">
+<h3 class="anchored" data-anchor-id="model-error-and-disturbances">5.1 Model error and disturbances</h3>
+<p>The condition is evaluated with a model. Under <span class="math inline">\(\dot x = f(x) + g(x)u + d(t)\)</span> with <span class="math inline">\(\|d\| \leq \delta\)</span>, the honest condition subtracts the worst case, <span class="math inline">\(L_fh + L_gh\,u - \delta\|\nabla h\| \geq -\alpha(h)\)</span>, which costs control authority up front. <strong>Input-to-state safety</strong> (ISSf) instead tempers the condition with a tunable term,</p>
+<p><span class="math display">\[L_fh + L_gh\,u \;\geq\; -\alpha(h) + \tfrac{1}{\varepsilon}\|L_gh\|^2 ,\]</span></p>
+<p>which renders invariant a slightly shrunken subset of <span class="math inline">\(\mathcal{C}\)</span> whose deficit is bounded in terms of <span class="math inline">\(\varepsilon\)</span> and the disturbance magnitude: a quantified loss of safe set instead of a lost guarantee. Larger <span class="math inline">\(\varepsilon\)</span> recovers the nominal condition, smaller <span class="math inline">\(\varepsilon\)</span> buys margin.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figs/fig06_robust_issf.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 6.</strong> A drift pushing the robot toward the obstacle, <span class="math inline">\(\|d\| \leq 0.55\)</span>. The nominal CBF, which assumes its model, loses the guarantee entirely (<span class="math inline">\(h\)</span> reaches <span class="math inline">\(-0.5\)</span>); the robust and ISSf forms keep <span class="math inline">\(h \geq 0\)</span> at the cost of a wider detour. Right: the worst-case margin as the disturbance bound grows — the nominal filter degrades linearly into violation while both robust forms stay non-negative until control authority runs out.</figcaption>
+</figure>
+</div>
+</section>
+<section id="input-limits-and-pointwise-feasibility" class="level3">
+<h3 class="anchored" data-anchor-id="input-limits-and-pointwise-feasibility">5.2 Input limits and pointwise feasibility</h3>
+<p>Nothing guarantees that <span class="math inline">\(K_{\mathrm{cbf}}(x) \cap \mathcal{U}\)</span> is non-empty. A CBF valid for unbounded inputs can be infeasible for the real actuator, and stacking several barriers makes conflicts likelier still: two individually satisfiable constraints may have no common solution. The standard responses are <strong>input-constrained CBFs</strong> (which build the chain so that feasibility is maintained under <span class="math inline">\(\mathcal{U}\)</span>), <strong>backup CBFs</strong> (which define the safe set implicitly as the states from which a known backup controller can keep the system safe, computed by forward simulation), soft-min and soft-max compositions of multiple barriers, and slack relaxation with a high penalty — which converts a solver failure into a quantified, logged safety degradation. The last is not a guarantee, but on hardware it beats an exception.</p>
+</section>
+<section id="undesired-equilibria-and-deadlock" class="level3">
+<h3 class="anchored" data-anchor-id="undesired-equilibria-and-deadlock">5.3 Undesired equilibria and deadlock</h3>
+<p>Pointwise optimality says nothing about where the closed loop ends up. The minimum-norm safe input can cancel the goal-seeking term exactly, creating asymptotically stable equilibria on <span class="math inline">\(\partial\mathcal{C}\)</span> — a robot that is provably safe and permanently stuck. This is not an artefact of a bad barrier: recent analysis shows the equilibria and their stability are properties of the <em>filter geometry</em>, largely independent of which valid CBF is used, and that CBF filters can also induce limit cycles and unbounded trajectories.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figs/fig08_deadlock.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 7.</strong> Deadlock. With the obstacle exactly between start and goal (red), the filtered input collapses to zero at a stable equilibrium one metre from the obstacle centre: safe for ever, never arriving. Rotating the nominal controller by <span class="math inline">\(20^\circ\)</span> (blue) removes the equilibrium and the task completes — the cure lives in the nominal controller, not in the barrier.</figcaption>
+</figure>
+</div>
+</section>
+<section id="sampled-data-zero-order-hold-and-estimated-state" class="level3">
+<h3 class="anchored" data-anchor-id="sampled-data-zero-order-hold-and-estimated-state">5.4 Sampled data, zero-order hold, and estimated state</h3>
+<p>The guarantee is continuous-time; the implementation samples. Between control instants the input is held, and <span class="math inline">\(h\)</span> can dip below zero even though every QP was feasible. A margin proportional to the control period restores safety for the sampled-data loop, and self-triggered or event-triggered variants compute how long the current input may safely be held.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figs/fig09_sampled_data.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 8.</strong> Sampled-data effects with the integration error removed (25 substeps per control period), so the only error is the zero-order hold. Left: at <span class="math inline">\(\Delta t = 0.5\)</span> s the barrier goes negative despite every QP being satisfied at the sampling instants. Right: tightening the condition by <span class="math inline">\(u_{\max}\Delta t\)</span> keeps <span class="math inline">\(\min_t h &gt; 0\)</span> across the whole range of control periods.</figcaption>
+</figure>
+</div>
+<p>The same argument applies to the state itself. If <span class="math inline">\(h\)</span> is evaluated at an estimate <span class="math inline">\(\hat x\)</span> rather than <span class="math inline">\(x\)</span> — invariably true when perception is in the loop — the condition certifies nothing about the true state. That gap is exactly what measurement-robust CBFs close, and it is important enough to deserve its own entry in the taxonomy (Section 7.7).</p>
+</section>
+</section>
+<section id="how-the-family-is-organised" class="level2">
+<h2 class="anchored" data-anchor-id="how-the-family-is-organised">6. How the family is organised</h2>
+<p>There are now well over a hundred named CBF variants, and reading them as a flat list is hopeless. Almost all of them are answers to one of five questions about the basic condition <span class="math inline">\(\dot h \geq -\alpha(h)\)</span> — what the dynamics look like, how the input reaches the barrier, what is uncertain, how many agents there are, and where <span class="math inline">\(h\)</span> itself came from. Placing a new paper on these axes usually predicts both its content and its limitations before reading the details.</p>
+<div class="diagram"><svg viewbox="0 0 980 430" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Five axes along which control barrier functions vary"><g font-family="Iowan Old Style,Georgia,serif" fill="#17222B"><rect x="8" y="177" width="132" height="64" fill="#fff" stroke="#17222B" stroke-width="1.4"></rect><text x="74" y="203" font-size="13.5" text-anchor="middle">the CBF</text><text x="74" y="223" font-size="13" text-anchor="middle" fill="#1F6F5C">condition</text><path d="M140,209 C180,209 180,46 218,46" fill="none" stroke="#B9C5CC" stroke-width="1.2"></path><text x="224" y="51" font-size="13" font-style="italic">What are the dynamics?</text><g><rect x="224" y="64" width="170" height="24" rx="12" fill="#fff" stroke="#B9C5CC" stroke-width="0.9"></rect><text x="309" y="80" font-size="12.2" text-anchor="middle">continuous-time (ZCBF)</text></g><g><rect x="402.0" y="64" width="107" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="456" y="80" font-size="12.2" text-anchor="middle">discrete-time</text></g><g><rect x="517.0" y="64" width="100" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="567" y="80" font-size="12.2" text-anchor="middle">sampled-data</text></g><g><rect x="625.0" y="64" width="86" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="668" y="80" font-size="12.2" text-anchor="middle">stochastic</text></g><g><rect x="719.0" y="64" width="142" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="790" y="80" font-size="12.2" text-anchor="middle">hybrid / impulsive</text></g><path d="M140,209 C180,209 180,120 218,120" fill="none" stroke="#B9C5CC" stroke-width="1.2"></path><text x="224" y="125" font-size="13" font-style="italic">How does the input enter?</text><g><rect x="224" y="138" width="135" height="24" rx="12" fill="#fff" stroke="#B9C5CC" stroke-width="0.9"></rect><text x="292" y="154" font-size="12.2" text-anchor="middle">relative degree 1</text></g><g><rect x="367.0" y="138" width="149" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="442" y="154" font-size="12.2" text-anchor="middle">HOCBF / exponential</text></g><g><rect x="524.0" y="138" width="135" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="592" y="154" font-size="12.2" text-anchor="middle">input-constrained</text></g><g><rect x="667.0" y="138" width="58" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="696" y="154" font-size="12.2" text-anchor="middle">backup</text></g><g><rect x="733.0" y="138" width="163" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="814" y="154" font-size="12.2" text-anchor="middle">non-smooth / soft-min</text></g><path d="M140,209 C180,209 180,194 218,194" fill="none" stroke="#B9C5CC" stroke-width="1.2"></path><text x="224" y="199" font-size="13" font-style="italic">What is uncertain?</text><g><rect x="224" y="212" width="58" height="24" rx="12" fill="#fff" stroke="#B9C5CC" stroke-width="0.9"></rect><text x="253" y="228" font-size="12.2" text-anchor="middle">robust</text></g><g><rect x="290.0" y="212" width="44" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="312" y="228" font-size="12.2" text-anchor="middle">ISSf</text></g><g><rect x="342.0" y="212" width="72" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="378" y="228" font-size="12.2" text-anchor="middle">adaptive</text></g><g><rect x="422.0" y="212" width="135" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="490" y="228" font-size="12.2" text-anchor="middle">risk-aware / CVaR</text></g><g><rect x="565.0" y="212" width="142" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="636" y="228" font-size="12.2" text-anchor="middle">measurement-robust</text></g><path d="M140,209 C180,209 180,268 218,268" fill="none" stroke="#B9C5CC" stroke-width="1.2"></path><text x="224" y="273" font-size="13" font-style="italic">Who is the system?</text><g><rect x="224" y="286" width="100" height="24" rx="12" fill="#fff" stroke="#B9C5CC" stroke-width="0.9"></rect><text x="274" y="302" font-size="12.2" text-anchor="middle">single agent</text></g><g><rect x="332.0" y="286" width="163" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="414" y="302" font-size="12.2" text-anchor="middle">graph / decentralised</text></g><g><rect x="503.0" y="286" width="86" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="546" y="302" font-size="12.2" text-anchor="middle">mean-field</text></g><g><rect x="597.0" y="286" width="156" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="675" y="302" font-size="12.2" text-anchor="middle">adversarially robust</text></g><path d="M140,209 C180,209 180,342 218,342" fill="none" stroke="#B9C5CC" stroke-width="1.2"></path><text x="224" y="347" font-size="13" font-style="italic">Where does the barrier come from?</text><g><rect x="224" y="360" width="107" height="24" rx="12" fill="#fff" stroke="#B9C5CC" stroke-width="0.9"></rect><text x="278" y="376" font-size="12.2" text-anchor="middle">hand-designed</text></g><g><rect x="339.0" y="360" width="114" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="396" y="376" font-size="12.2" text-anchor="middle">sum-of-squares</text></g><g><rect x="461.0" y="360" width="128" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="525" y="376" font-size="12.2" text-anchor="middle">Gaussian process</text></g><g><rect x="597.0" y="360" width="58" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="626" y="376" font-size="12.2" text-anchor="middle">neural</text></g><g><rect x="663.0" y="360" width="163" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="744" y="376" font-size="12.2" text-anchor="middle">Koopman / behavioural</text></g></g></svg><div class="dcap">Five axes of variation. The white pill in each row is the textbook default; the rest are the named variants covered in Section 7. Most published methods combine two or three — for example GCBF+ is a neural, graph-structured, discrete-time-implemented barrier, and MR-CBF is a measurement-robust, backup-set construction.</div></div>
+<p>Two caveats before the catalogue. First, the axes are not independent: a learned barrier for a multi-agent system with perception in the loop inherits the difficulties of all three axes and needs the fixes from all three. Second, the names are not standardised — <em>adaptive CBF</em> means at least three different things in the literature (parameter adaptation in the plant model, online tuning of <span class="math inline">\(\alpha\)</span>, and time-varying safe sets), so read definitions rather than titles.</p>
+</section>
+<section id="the-variants-one-axis-at-a-time" class="level2">
+<h2 class="anchored" data-anchor-id="the-variants-one-axis-at-a-time">7. The variants, one axis at a time</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Variant</th>
+<th>What it changes</th>
+<th>Use it when</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>HOCBF / exponential</strong></td>
+<td>Chain of conditions <span class="math inline">\(\psi_i\)</span> up to the relative degree</td>
+<td>The input does not appear in <span class="math inline">\(\dot h\)</span> (position constraints, most robots)</td>
+<td>More gains to tune; certified set shrinks to <span class="math inline">\(\bigcap_i\{\psi_i\geq 0\}\)</span></td>
+</tr>
+<tr class="even">
+<td><strong>Discrete-time CBF</strong></td>
+<td><span class="math inline">\(h(x_{k+1}) - h(x_k) \geq -\alpha(h(x_k))\)</span></td>
+<td>The controller is genuinely discrete, or inside an MPC</td>
+<td>Condition is nonlinear in <span class="math inline">\(u\)</span> unless the plant is affine in the step</td>
+</tr>
+<tr class="odd">
+<td><strong>Sampled-data CBF</strong></td>
+<td>Adds a hold margin over the control period</td>
+<td>Always, on real hardware</td>
+<td>Conservatism proportional to <span class="math inline">\(\Delta t\)</span></td>
+</tr>
+<tr class="even">
+<td><strong>Stochastic CBF</strong></td>
+<td>Diffusion term via Itô; exit-probability bounds</td>
+<td>Noise is better modelled as a process than a bound</td>
+<td>Guarantees become probabilistic</td>
+</tr>
+<tr class="odd">
+<td><strong>Robust CBF</strong></td>
+<td>Subtracts <span class="math inline">\(\delta\|\nabla h\|\)</span> or a differential-inclusion term</td>
+<td>A hard bound on the disturbance is available</td>
+<td>Pays worst case at all times</td>
+</tr>
+<tr class="even">
+<td><strong>ISSf-CBF</strong></td>
+<td>Tempering term; invariance of a slightly enlarged set</td>
+<td>The worst case is too expensive to pay</td>
+<td>Quantified, not zero, degradation</td>
+</tr>
+<tr class="odd">
+<td><strong>Risk-aware / CVaR</strong></td>
+<td>Tail-risk constraint instead of worst case</td>
+<td>Heavy-tailed uncertainty; a risk budget exists</td>
+<td>Needs a distribution or samples</td>
+</tr>
+<tr class="even">
+<td><strong>Adaptive CBF</strong></td>
+<td>Adapts plant parameters, <span class="math inline">\(\alpha\)</span>, or the set online</td>
+<td>Parametric uncertainty, or fixed gains are too conservative</td>
+<td>Guarantee holds along the adaptation law, not pointwise</td>
+</tr>
+<tr class="odd">
+<td><strong>Input-constrained CBF</strong></td>
+<td>Builds the chain so <span class="math inline">\(K_{\mathrm{cbf}}\cap\mathcal{U} \neq \emptyset\)</span></td>
+<td>Saturating actuators with high relative degree</td>
+<td>Construction is problem-specific</td>
+</tr>
+<tr class="even">
+<td><strong>Backup CBF</strong></td>
+<td>Implicit safe set = states a backup policy can hold</td>
+<td>No analytic CBF exists under the input limits</td>
+<td>Forward simulation per step; sensitivity propagation</td>
+</tr>
+<tr class="odd">
+<td><strong>Graph CBF</strong></td>
+<td>Barrier defined on a neighbourhood, not the joint state</td>
+<td>Many agents, local sensing, changing topology</td>
+<td>Needs an attention/locality argument to stay valid</td>
+</tr>
+<tr class="even">
+<td><strong>Measurement-robust CBF</strong></td>
+<td>Adds <span class="math inline">\(a(y) + b(y)\|u\|\)</span> for state-estimate error</td>
+<td><span class="math inline">\(h\)</span> is evaluated on perception output</td>
+<td>Condition becomes a second-order cone constraint</td>
+</tr>
+<tr class="odd">
+<td><strong>Predictive CBF</strong></td>
+<td>Looks ahead over a horizon before committing</td>
+<td>Myopic filtering causes deadlock or infeasibility</td>
+<td>Solves an optimisation, not a QP</td>
+</tr>
+<tr class="even">
+<td><strong>Neural CBF</strong></td>
+<td><span class="math inline">\(h_\theta\)</span> is a network trained from data</td>
+<td>The safe set is high-dimensional or defined by data</td>
+<td>Needs verification to mean anything</td>
+</tr>
+</tbody>
+</table>
+<section id="dynamics-discrete-time-sampled-data-stochastic" class="level3">
+<h3 class="anchored" data-anchor-id="dynamics-discrete-time-sampled-data-stochastic">7.1 Dynamics: discrete-time, sampled-data, stochastic</h3>
+<p>The discrete-time CBF replaces the derivative with a difference, <span class="math inline">\(h(x_{k+1}) - h(x_k) \geq -\alpha(h(x_k))\)</span>, which is natural when the controller is a digital loop or the barrier sits inside an MPC — the combination of discrete-time CBFs with MPC is now a standard safety-critical MPC formulation. High-order and adaptive discrete-time versions extend this to high relative degree and to time-varying penalty functions that recover feasibility. A subtlety: the discrete condition is generally <em>nonlinear</em> in <span class="math inline">\(u\)</span>, so the tidy QP structure is not automatic. Truncated-Taylor and predictive constructions have been proposed to get high-order behaviour with a single class-<span class="math inline">\(\mathcal{K}\)</span> function instead of a tuned chain.</p>
+<p>Stochastic CBFs treat noise as a diffusion and produce bounds on the probability of leaving the safe set over a horizon, rather than deterministic invariance. If the physical noise is genuinely unbounded — most sensor noise is — this is the honest formulation, and its guarantee is correspondingly probabilistic.</p>
+</section>
+<section id="input-channel-high-order-input-constrained-backup-non-smooth" class="level3">
+<h3 class="anchored" data-anchor-id="input-channel-high-order-input-constrained-backup-non-smooth">7.2 Input channel: high-order, input-constrained, backup, non-smooth</h3>
+<p>Section 4 covered HOCBFs. The other three all exist because of actuator limits. Input-constrained CBFs generalise the HOCBF chain so that feasibility under <span class="math inline">\(\mathcal{U}\)</span> is maintained by construction, including non-uniform relative degrees across input channels. Backup CBFs abandon the analytic route: define the safe set implicitly as the states from which a simple, known backup controller (full braking, hover, sit) keeps the system safe, and evaluate it by integrating the backup trajectory forward at every step — expensive but remarkably effective, and now with closed-form solutions for the bounded-input case. Soft-min and soft-max compositions collapse many constraints into one smooth barrier (the log-sum-exp aggregation in <code>cbf_core.soft_min</code>), which is also what makes closed-form filtering possible for multi-constraint problems.</p>
+</section>
+<section id="uncertainty-robust-issf-risk-aware" class="level3">
+<h3 class="anchored" data-anchor-id="uncertainty-robust-issf-risk-aware">7.3 Uncertainty: robust, ISSf, risk-aware</h3>
+<p>Covered in Section 5.1. The distinction worth carrying: robust and ISSf formulations need a <em>bound</em>; stochastic and risk-aware formulations need a <em>distribution</em> or samples. Choosing between them is a modelling decision about what you actually know, and Bayesian and CVaR variants for discrete-time systems with learned dynamics are an active 2026 topic.</p>
+</section>
+<section id="adaptation-and-parameter-tuning" class="level3">
+<h3 class="anchored" data-anchor-id="adaptation-and-parameter-tuning">7.4 Adaptation and parameter tuning</h3>
+<p>Adaptive CBFs address parametric uncertainty in <span class="math inline">\(f, g\)</span> by adapting the parameter estimate along with the barrier condition, so the guarantee holds along the adaptation law. Separately — and confusingly under the same name — a large body of work adapts the class-<span class="math inline">\(\mathcal{K}\)</span> function or the CBF parameters online to reduce conservatism: optimal-decay CBFs solve for the decay rate inside the QP with guaranteed pointwise feasibility; penalty and rate-tunable formulations modulate how hard each constraint pushes; learning-based schemes predict good parameters from the local environment with uncertainty-aware verification of the candidate values before use.</p>
+</section>
+<section id="multi-agent-and-graph-cbfs" class="level3">
+<h3 class="anchored" data-anchor-id="multi-agent-and-graph-cbfs">7.5 Multi-agent and graph CBFs</h3>
+<p>For <span class="math inline">\(N\)</span> agents, writing a single barrier on the joint state scales badly and must be redesigned whenever <span class="math inline">\(N\)</span> changes. Pairwise barriers with a responsibility split are the classical decentralised answer, and they work — but they are myopic, and the induced local policy jams in congested configurations (Figure 9).</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figs/fig07_graph_cbf.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 9.</strong> Eight agents swapping antipodal positions with hand-designed pairwise barriers, each agent solving its own QP over neighbours inside a 1.8 m sensing radius. Middle: the neighbour graph at <span class="math inline">\(t=5\)</span> s — the constraint structure is a graph whose edges appear and vanish as agents move. Right: the closest pair rides exactly on the collision threshold, so safety holds throughout, but the group congests near the centre and several agents stall short of their goals. Learned graph certificates target exactly this performance gap, not the safety property.</figcaption>
+</figure>
+</div>
+<p>The <strong>graph CBF</strong> (GCBF) formalises the locality that pairwise schemes use implicitly: the barrier is a function of an agent’s neighbourhood <span class="math inline">\(\bar x_{\mathcal{N}_i}\)</span> rather than the joint state, with the requirement that nodes outside the sensing radius <span class="math inline">\(R\)</span> do not affect its value — a condition that keeps <span class="math inline">\(h\)</span> continuously differentiable even though the <em>index set</em> <span class="math inline">\(\mathcal{N}_i(t)\)</span> jumps as agents enter and leave the radius. That gives a single certificate valid for an arbitrary number of agents. GCBF+ parameterises it with a graph neural network together with a distributed policy, consumes LiDAR point clouds instead of ground-truth states, and was demonstrated on drone swarms and in simulations scaling to hundreds of agents, outperforming both hand-designed CBF baselines and leading multi-agent RL. Mean-field CBFs push the same idea to the swarm limit, deriving constraints on a distribution rather than on individuals.</p>
+</section>
+<section id="adversarial-and-non-cooperative-settings" class="level3">
+<h3 class="anchored" data-anchor-id="adversarial-and-non-cooperative-settings">7.6 Adversarial and non-cooperative settings</h3>
+<p>The pairwise construction above assumes every agent does its share. If some do not — faulty, selfish, or adversarial — the split is invalid. Adversarially robust CBFs assume a bounded number of misbehaving neighbours and keep the guarantee against their worst-case inputs; trust-based rate-tunable variants modulate each constraint by an online estimate of how cooperative the neighbour appears.</p>
+</section>
+<section id="measurement-robust-cbfs-and-perception-in-the-loop" class="level3">
+<h3 class="anchored" data-anchor-id="measurement-robust-cbfs-and-perception-in-the-loop">7.7 Measurement-robust CBFs and perception in the loop</h3>
+<p>When <span class="math inline">\(h\)</span> is evaluated on a state estimate <span class="math inline">\(\hat x\)</span> produced by a learned perception module, the classical condition certifies nothing: the error <span class="math inline">\(\|x - \hat x\|\)</span> enters both <span class="math inline">\(\nabla h\)</span> and <span class="math inline">\(\alpha(h)\)</span>. The <strong>measurement-robust CBF</strong> of Dean, Taylor, Cosner, Recht and Ames handles this by tightening the condition with terms that grow with the estimation error bound <span class="math inline">\(\varepsilon(y)\)</span>:</p>
+<p><span class="math display">\[\sup_{u \in \mathcal{U}} \Big[ L_f h(\hat x) + L_g h(\hat x)\,u - \big( a(y) + b(y)\,\|u\|_2 \big) \Big] \;\geq\; -\alpha\big(h(\hat x)\big),\]</span></p>
+<p>where <span class="math inline">\(a\)</span> absorbs the Lipschitz error in the drift and barrier terms and <span class="math inline">\(b\)</span> scales with the error in <span class="math inline">\(L_g h\)</span>. Two features matter. The <span class="math inline">\(\|u\|\)</span> term makes the constraint a <strong>second-order cone</strong> rather than a half-space, so the filter becomes an SOCP; and the original CBF condition is recovered exactly when the measurement is perfect. Their work also runs the argument backwards: the MR-CBF condition tells you how accurate a learned perception module has to be, and therefore how to sample training data for it. The follow-up unifies MR-CBFs with backup sets and demonstrates the result on a Segway using onboard stereo vision, where the plain CBF loses safety and the measurement-robust version keeps it.</p>
+<p>This area has moved quickly because perception-based autonomy demands it: recent work covers CBFs over neural radiance fields, safety filters conditioned on language, adaptive handling of out-of-distribution measurements, and attention-derived obstacle sets read directly out of a robot policy’s own internals (Section 8.6).</p>
+</section>
+<section id="beyond-state-constraints-time-logic-and-prediction" class="level3">
+<h3 class="anchored" data-anchor-id="beyond-state-constraints-time-logic-and-prediction">7.8 Beyond state constraints: time, logic, and prediction</h3>
+<p>Safety is not always a static set. Fixed-time and prescribed-time barriers encode <em>when</em> something must happen, not only what must be avoided; signal-temporal-logic CBFs compile temporal specifications into time-varying barriers; and predictive CBFs look ahead over a horizon before committing to an input, which repairs the myopia responsible for much deadlock and infeasibility. The bridge to model-predictive control is by now explicit in both directions: predictive safety filters can be read as CBFs, and discrete-time CBFs sit naturally inside MPC.</p>
+</section>
+</section>
+<section id="cbfs-with-reinforcement-learning-and-data-driven-control" class="level2">
+<h2 class="anchored" data-anchor-id="cbfs-with-reinforcement-learning-and-data-driven-control">8. CBFs with reinforcement learning and data-driven control</h2>
+<p>Two distinct problems get mixed together under this heading, and separating them is the single most useful move in reading this literature:</p>
+<ol type="1">
+<li><strong>Learning is the problem.</strong> An RL policy explores, and exploration on hardware breaks things. A CBF is used as a shield so that learning is survivable.</li>
+<li><strong>Learning is the solution.</strong> Designing <span class="math inline">\(h\)</span> (or the model it needs) by hand is the bottleneck. Data is used to synthesise the barrier itself.</li>
+</ol>
+<p>The first uses a CBF to protect learning; the second uses learning to obtain a CBF. Most practical systems now need both, which is why surveys of this area cover them together.</p>
+<section id="learning-the-safe-set" class="level3">
+<h3 class="anchored" data-anchor-id="learning-the-safe-set">8.1 Learning the safe set</h3>
+<p>The oldest data-driven route is supervised: sample states, label them safe or unsafe, and fit a smooth classifier whose decision function serves as a candidate barrier. With an RBF-kernel SVM the gradient is available in closed form, which is all the filter needs, and the learned zero level set recovers non-convex geometry that would be tedious to write down analytically.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figs/fig10_svm_cbf.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 10.</strong> A barrier learned from 4000 labelled samples of a non-convex unsafe region (two discs and a bar). Left: labels and the learned zero level set. Middle: the learned <span class="math inline">\(h_\theta\)</span> field with the true obstacle boundaries dashed; the filtered trajectory threads the gap between the bar and the upper disc. Right: the learned barrier stays positive and the true clearance stays non-negative — but only just, because nothing in the fit created a margin between the learned level set and the real boundary.</figcaption>
+</figure>
+</div>
+<div class="warn">
+<p><span class="tag">THE CENTRAL CAVEAT</span></p>
+<p>A function whose zero level set matches the obstacle geometry is a learned <em>safe set</em>, not a control barrier function. The CBF property is the <em>descent condition</em> — that some admissible input can always arrest the decay of <span class="math inline">\(h\)</span> — and fitting labels never checks it. This is why neural-CBF work is inseparable from verification (Section 8.5), and why a learned <span class="math inline">\(h\)</span> that performs beautifully in simulation can fail on a system with tighter actuator limits than the training environment had.</p>
+</div>
+</section>
+<section id="learning-the-dynamics-the-barrier-needs" class="level3">
+<h3 class="anchored" data-anchor-id="learning-the-dynamics-the-barrier-needs">8.2 Learning the dynamics the barrier needs</h3>
+<p>The complementary route keeps a hand-designed <span class="math inline">\(h\)</span> and learns the model entering <span class="math inline">\(L_f h\)</span> and <span class="math inline">\(L_g h\)</span>. Gaussian processes are the classical choice because they come with posterior uncertainty that can be folded straight into a robust condition: use the posterior mean in the constraint and subtract a multiple of the posterior standard deviation as a margin. As data accumulates the margin shrinks and the conservatism with it — the mechanism behind GP-based safe control and the model-learning half of RL-CBF. Variants include Gaussian CBFs that build <span class="math inline">\(h\)</span> itself non-parametrically from safety samples, Koopman-operator constructions that lift nonlinear dynamics into a space where the CBF constraint is affine, disturbance-observer-based robust CBFs that estimate the uncertainty pointwise rather than bounding it, and input-output data-driven CBFs built from a behavioural representation without identifying a state-space model at all.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figs/fig11_gp_margin.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 11.</strong> Episodic GP learning of an unknown drift feeding a robust CBF. Episode 0 knows only a crude bound (<span class="math inline">\(\delta = 0.8\)</span>), so the margin dominates and the robot is deflected away without reaching the goal. After one episode the margin drops to about <span class="math inline">\(0.11\)</span> and the task completes. Note episode 1, which briefly dips below <span class="math inline">\(h = 0\)</span>: the GP is confident where it has no data, and a posterior standard deviation is not a high-probability bound. This is precisely why the literature uses RKHS or scenario bounds, an inflation factor, and a floor on the assumed uncertainty.</figcaption>
+</figure>
+</div>
+</section>
+<section id="filtering-reinforcement-learning" class="level3">
+<h3 class="anchored" data-anchor-id="filtering-reinforcement-learning">8.3 Filtering reinforcement learning</h3>
+<p>The oldest and still most common pattern: let the RL policy propose, and pass the proposal through a CBF-QP before it reaches the actuator. RL-CBF (Cheng, Orosz, Murray and Burdick) combined a model-free policy, a GP model of the unknown dynamics, and a CBF controller to maintain safety with high probability <em>throughout</em> learning while also guiding exploration by restricting the set of explorable policies; robust-CBF variants model the disturbance as a differential inclusion and place the resulting filter inside a SAC loop. The measured benefit is twofold and both halves matter: fewer violations, and better sample efficiency, because the agent stops wasting rollouts on regions it should never have visited.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="figs/fig12_safe_rl.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 12.</strong> A small cross-entropy-method policy search on a 2-D navigation task, run twice with identical seeds and reward. Unfiltered exploration accumulates roughly 2600 unsafe steps over 25 iterations; with a closed-form CBF projection applied to every proposed action during training, that count is zero. The filtered run also reaches a good policy sooner (iteration 2 rather than 4) and settles at a slightly lower final return — the conservatism price, visible as the tighter path around the obstacles in the right panel.</figcaption>
+</figure>
+</div>
+</section>
+<section id="making-the-filter-part-of-the-policy" class="level3">
+<h3 class="anchored" data-anchor-id="making-the-filter-part-of-the-policy">8.4 Making the filter part of the policy</h3>
+<p>Pattern A below has a structural defect: the policy never learns that the filter exists. It keeps proposing inputs that get corrected, the critic is trained on actions the environment never executed, and the result is a policy that is safe only because something downstream cleans up after it. Three responses have emerged, and they are complementary rather than competing.</p>
+<div class="diagram"><svg viewbox="0 0 980 258" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Four ways to combine a control barrier function with reinforcement learning"><defs><marker id="ar2" markerwidth="8" markerheight="8" refx="6" refy="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#17222B"></path></marker></defs><g font-family="Iowan Old Style,Georgia,serif" fill="#17222B"><text x="14" y="20" font-size="13">A. filter at deployment</text><line x1="14" y1="28" x2="222" y2="28" stroke="#B9C5CC"></line><rect x="28" y="44" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="103" y="66" font-size="12.5" text-anchor="middle">policy</text><line x1="103" y1="78" x2="103" y2="94" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="28" y="96" width="150" height="34" fill="#EEF4F2" stroke="#1F6F5C"></rect><text x="103" y="118" font-size="12.5" text-anchor="middle">CBF-QP</text><line x1="103" y1="130" x2="103" y2="146" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="28" y="148" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="103" y="170" font-size="12.5" text-anchor="middle">plant</text><path d="M178,195 L192,195 L192,50 L180,50" fill="none" stroke="#B9C5CC" stroke-dasharray="4 3" marker-end="url(#ar2)"></path><text x="28" y="214" font-size="11.2" fill="#3c4c57">guarantee, no retraining; policy</text><text x="28" y="228" font-size="11.2" fill="#3c4c57">stays unaware, so it fights the</text><text x="28" y="242" font-size="11.2" fill="#3c4c57">filter</text><text x="252" y="20" font-size="13">B. filter during training</text><line x1="252" y1="28" x2="460" y2="28" stroke="#B9C5CC"></line><rect x="266" y="44" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="341" y="66" font-size="12.5" text-anchor="middle">policy</text><line x1="341" y1="78" x2="341" y2="94" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="266" y="96" width="150" height="34" fill="#EEF4F2" stroke="#1F6F5C"></rect><text x="341" y="118" font-size="12.5" text-anchor="middle">CBF-QP</text><line x1="341" y1="130" x2="341" y2="146" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="266" y="148" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="341" y="170" font-size="12.5" text-anchor="middle">plant</text><path d="M416,195 L430,195 L430,50 L418,50" fill="none" stroke="#B9C5CC" stroke-dasharray="4 3" marker-end="url(#ar2)"></path><text x="266" y="214" font-size="11.2" fill="#3c4c57">safe exploration; store the</text><text x="266" y="228" font-size="11.2" fill="#3c4c57">executed action or the critic</text><text x="266" y="242" font-size="11.2" fill="#3c4c57">learns the wrong policy</text><text x="490" y="20" font-size="13">C. filter inside the policy</text><line x1="490" y1="28" x2="698" y2="28" stroke="#B9C5CC"></line><rect x="504" y="44" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="579" y="66" font-size="12.5" text-anchor="middle">network</text><line x1="579" y1="78" x2="579" y2="94" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="504" y="96" width="150" height="34" fill="#EEF4F2" stroke="#1F6F5C"></rect><text x="579" y="118" font-size="12.5" text-anchor="middle">dCBF layer</text><line x1="579" y1="130" x2="579" y2="146" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="504" y="148" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="579" y="170" font-size="12.5" text-anchor="middle">plant</text><path d="M654,195 L668,195 L668,50 L656,50" fill="none" stroke="#B9C5CC" stroke-dasharray="4 3" marker-end="url(#ar2)"></path><text x="504" y="214" font-size="11.2" fill="#3c4c57">end-to-end gradients; class-K</text><text x="504" y="228" font-size="11.2" fill="#3c4c57">parameters become trainable</text><text x="728" y="20" font-size="13">D. barrier in the objective</text><line x1="728" y1="28" x2="936" y2="28" stroke="#B9C5CC"></line><rect x="742" y="44" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="817" y="66" font-size="12.5" text-anchor="middle">policy</text><line x1="817" y1="78" x2="817" y2="94" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="742" y="96" width="150" height="34" fill="#EEF4F2" stroke="#1F6F5C"></rect><text x="817" y="118" font-size="12.5" text-anchor="middle">reward + CBF term</text><line x1="817" y1="130" x2="817" y2="146" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="742" y="148" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="817" y="170" font-size="12.5" text-anchor="middle">plant</text><path d="M892,195 L906,195 L906,50 L894,50" fill="none" stroke="#B9C5CC" stroke-dasharray="4 3" marker-end="url(#ar2)"></path><text x="742" y="214" font-size="11.2" fill="#3c4c57">no hard guarantee alone; reduces</text><text x="742" y="228" font-size="11.2" fill="#3c4c57">how often a hard filter must act</text></g></svg><div class="dcap">Four ways to combine a barrier with a learned policy. B and C fix the credit assignment problem in A from opposite directions — B by making the environment's transitions consistent with the filter, C by making the filter differentiable so gradients flow through it.</div></div>
+<p><strong>Differentiable CBF layers.</strong> BarrierNet embeds a differentiable higher-order CBF-QP as a trainable layer, so gradients flow through the safety projection and the class-<span class="math inline">\(\mathcal{K}\)</span> parameters themselves become learnable — which directly attacks the conservativeness of fixed CBF parameters while keeping the guarantee. Related designs use the gauge map or a closed-form log-sum-exp solution to avoid differentiating through a QP solver at every training step, which is the main computational obstacle for multi-constraint problems.</p>
+<p><strong>Enforcing the CBF in training.</strong> The more recent shift is to apply the filter during training and then remove it: CBF-RL enforces barrier constraints in the training loop so the policy <em>internalises</em> them, biasing both actions and rewards toward safety, and reports deployment without any runtime filter — validated on a Unitree G1 humanoid avoiding obstacles and climbing stairs. This inverts the usual division of labour: the CBF becomes a training-time teacher rather than a runtime guard.</p>
+<p><strong>Barrier-shaped objectives.</strong> Penalising violation of the CBF inequality in the reward, or learning a neural barrier certificate jointly with the policy in a model-free loop, is cheaper and differentiable but provides no guarantee on its own. Treat it as a way to reduce how often a hard mechanism must intervene.</p>
+</section>
+<section id="neural-cbfs-and-why-verification-is-the-whole-game" class="level3">
+<h3 class="anchored" data-anchor-id="neural-cbfs-and-why-verification-is-the-whole-game">8.5 Neural CBFs and why verification is the whole game</h3>
+<p>Neural certificates scale to state dimensions where sum-of-squares programming and gridded Hamilton-Jacobi methods stop, and the training recipe is now standard: sample safe states, unsafe states, and interior states, then penalise sign violations on the first two and violation of the descent condition on the third. The supremum over a norm-bounded input set has a closed form, <span class="math inline">\(\sup_{\|u\| \leq u_{\max}} L_g h\,u = u_{\max}\|L_g h\|\)</span>, so no inner optimisation is needed.</p>
+<p>Low training loss, however, is evidence about the sampled points and nothing more. The descent condition must hold on an uncountable set, so the field has converged on verification as an integral part of synthesis rather than an afterthought:</p>
+<ul>
+<li><strong>Exact methods</strong> for ReLU barriers via MILP/SMT encodings — complete, with exponential worst-case cost.</li>
+<li><strong>Bound propagation</strong> (the CROWN family) over the network and its Jacobian, including symbolic derivative bounds; sound and incomplete, but scalable, and the subject of continued work on scaling neural-CBF verification through linear bound propagation.</li>
+<li><strong>Verification in the loop</strong>, where branch-and-bound runs during training and counterexamples are fed back — the CEGIS pattern, which produces a network and its certificate together.</li>
+<li><strong>Stochastic and data-driven certification</strong>, giving probabilistic guarantees from finite samples for systems where a deterministic bound is unavailable.</li>
+</ul>
+</section>
+<section id="filtering-generative-and-foundation-model-policies" class="level3">
+<h3 class="anchored" data-anchor-id="filtering-generative-and-foundation-model-policies">8.6 Filtering generative and foundation-model policies</h3>
+<p>The newest and fastest-moving application is safety for large learned policies — diffusion planners and vision-language-action models — where the policy is far too complex to verify and a filter is the only practical mechanism. Work through 2025 and 2026 spans post-hoc projection of generated trajectories, barrier constraints embedded <em>inside</em> the denoising or flow-matching process so the whole generated action chunk is safe rather than just the next action, log-sum-exp aggregate barriers to keep the overhead of many constraints manageable, plug-and-play geometric safety layers, semantic shielding, language-conditioned safety filters, adaptive handling of out-of-distribution measurements, and training-free schemes that read the obstacle set out of a policy’s own attention maps at control rate. Benchmarks have appeared alongside them.</p>
+<div class="note">
+<p>Read these as engineering rather than as theory: the barrier usually lives in end-effector or Cartesian space with a simple geometric <span class="math inline">\(h\)</span>, the model providing <span class="math inline">\(L_gh\)</span> is a kinematic approximation, and the guarantee is conditional on perception. That is still a decisive improvement over an unguarded policy, and it is currently where most of the applied activity is.</p>
+</div>
+</section>
+</section>
+<section id="a-checklist-for-deployment" class="level2">
+<h2 class="anchored" data-anchor-id="a-checklist-for-deployment">9. A checklist for deployment</h2>
+<p>Collecting the failure modes from Sections 5 and 8 into the order in which they tend to bite:</p>
+<ol type="1">
+<li><strong>Check the relative degree first.</strong> If <span class="math inline">\(L_gh \equiv 0\)</span> the filter is decoration. Verify numerically that <span class="math inline">\(\|L_gh\|\)</span> is bounded away from zero on the operating set, or build the HOCBF chain.</li>
+<li><strong>Verify the initial state against every level of the chain.</strong> <span class="math inline">\(h(x_0) \geq 0\)</span> is not enough for an HOCBF; all <span class="math inline">\(\psi_i(x_0) \geq 0\)</span> are needed.</li>
+<li><strong>Put the real actuator limits in the QP</strong>, and test feasibility across the workspace offline rather than discovering infeasibility in flight. If constraints can conflict, decide in advance between an input-constrained construction, a backup set, soft-min aggregation, or slack with a logged penalty.</li>
+<li><strong>Add a sampled-data margin</strong> sized for the real control period, and confirm it with a simulation whose integration step is far smaller than the control step (Figure 8 is exactly this test).</li>
+<li><strong>Account for state-estimate error</strong> if <span class="math inline">\(h\)</span> reads perception: an MR-CBF term, and an SOCP solver to go with it.</li>
+<li><strong>Sweep the class-<span class="math inline">\(\mathcal{K}\)</span> function</strong> and plot <span class="math inline">\(\min_t h\)</span> against intervention magnitude. Conservatism is a design choice, so choose it deliberately.</li>
+<li><strong>Hunt for deadlock in the intended workspace</strong>, including symmetric configurations, before trusting the loop. If found, fix the nominal controller, not the barrier.</li>
+<li><strong>Log the intervention rate in production.</strong> A filter that never activates is untested; one that activates constantly means the nominal controller and the barrier disagree about the task, and the safety margin is being spent continuously rather than held in reserve.</li>
+<li><strong>For anything learned, verify the descent condition</strong>, not just the sign of <span class="math inline">\(h\)</span> on a test set — and re-verify after every retraining and every change to the actuator limits.</li>
+</ol>
+</section>
+<section id="references" class="level2">
+<h2 class="anchored" data-anchor-id="references">10. References</h2>
+<section id="foundations-and-surveys" class="level3">
+<h3 class="anchored" data-anchor-id="foundations-and-surveys">Foundations and surveys</h3>
+<ol type="1">
+<li>A. D. Ames, X. Xu, J. W. Grizzle, P. Tabuada. <em>Control barrier function based quadratic programs for safety critical systems.</em> IEEE Trans. Automatic Control 62(8):3861–3876, 2017. — The reference statement of the theorem in Section 2.</li>
+<li>A. D. Ames, J. W. Grizzle, P. Tabuada. <em>Control barrier function based quadratic programs with application to adaptive cruise control.</em> IEEE CDC, 2014. — The ACC benchmark reproduced in Figure 4.</li>
+<li>A. D. Ames, S. Coogan, M. Egerstedt, G. Notomista, K. Sreenath, P. Tabuada. <em>Control barrier functions: theory and applications.</em> European Control Conference, 3420–3431, 2019.</li>
+<li>K.-C. Hsu, H. Hu, J. F. Fisac. <em>The safety filter: a unified view of safety-critical control in autonomous systems.</em> Annual Review of Control, Robotics, and Autonomous Systems 7:47–72, 2024. — Places CBFs, HJ reachability and predictive filters in one framework.</li>
+<li>K. Garg, J. Usevitch, J. Breeden, M. Black, D. Agrawal, H. Parwana, D. Panagou. <em>Advances in the theory of control barrier functions: addressing practical challenges in safe control synthesis for autonomous and robotic systems.</em> Annual Reviews in Control, 2024. arXiv:2312.16719.</li>
+<li>S. Zhao, Z. Yan, T. Huang, S. Wen. <em>A comprehensive review on control barrier functions: uncertainty handling, design optimization, and feasibility analysis.</em> IEEE Trans. Cybernetics 56(4):2061–2069, 2026. doi:10.1109/TCYB.2025.3633800.</li>
+<li><em>Safe control against uncertainty: a comprehensive review of control barrier function strategies.</em> IEEE, 2025 — IEEE Xplore document 10836828. Classifies uncertainty by learnability and transferability and surveys the techniques attached to each class.</li>
+<li>P. Panja, M. Rayguru, S. Baidya. <em>Survey paper on control barrier functions.</em> arXiv:2408.13271, 2024.</li>
+</ol>
+</section>
+<section id="relative-degree-discrete-time-feasibility" class="level3">
+<h3 class="anchored" data-anchor-id="relative-degree-discrete-time-feasibility">Relative degree, discrete time, feasibility</h3>
+<ol start="9" type="1">
+<li>W. Xiao, C. Belta. <em>High-order control barrier functions.</em> IEEE Trans. Automatic Control 67(7):3655–3662, 2022.</li>
+<li>Q. Nguyen, K. Sreenath. <em>Exponential control barrier functions for enforcing high relative-degree safety-critical constraints.</em> ACC, 2016.</li>
+<li>Y. Xiong, D.-H. Zhai, M. Tavakoli, Y. Xia. <em>Discrete-time control barrier function: high-order case and adaptive case.</em> IEEE Trans. Cybernetics, 2022.</li>
+<li>J. Zeng, B. Zhang, K. Sreenath. <em>Safety-critical model predictive control with discrete-time control barrier function.</em> ACC, 2021.</li>
+<li>D. R. Agrawal, D. Panagou. <em>Safe control synthesis via input constrained control barrier functions.</em> IEEE CDC, 2021.</li>
+<li>T. Gurriet, A. Singletary, et al.&nbsp;<em>Towards a framework for realizable safety critical control through active set invariance</em> / backup-set CBFs. ICCPS, 2018; and closed-form backup CBF solutions, arXiv:2510.05436, 2025.</li>
+<li>P. Rabiee, J. B. Hoagg. <em>Soft-minimum and soft-maximum barrier functions for safety with actuation constraints.</em> Automatica 171:111921, 2025.</li>
+<li>X. Tan, D. V. Dimarogonas. <em>On the undesired equilibria induced by control barrier function based quadratic programs.</em> Automatica 159:111359, 2024.</li>
+<li>P. Mestres, Y. Chen, E. Dall’Anese, J. Cortés. <em>Control barrier function-based safety filters: characterization of undesired equilibria, unbounded trajectories, and limit cycles.</em> Journal of Nonlinear Science 36:41, 2026. doi:10.1007/s00332-026-10255-x.</li>
+<li>M. F. Reis, J. P. Carvalho, A. P. Aguiar. <em>A unified stability analysis of safety-critical control using multiple control barrier functions.</em> arXiv:2503.15823, 2025.</li>
+<li><em>Explicit control barrier function-based safety filters and their resource-aware computation.</em> arXiv:2512.10118, 2025/26.</li>
+</ol>
+</section>
+<section id="uncertainty-robustness-perception" class="level3">
+<h3 class="anchored" data-anchor-id="uncertainty-robustness-perception">Uncertainty, robustness, perception</h3>
+<ol start="20" type="1">
+<li>X. Xu, P. Tabuada, J. W. Grizzle, A. D. Ames. <em>Robustness of control barrier functions for safety critical control.</em> IFAC-PapersOnLine 48(27):54–61, 2015.</li>
+<li>S. Kolathaya, A. D. Ames. <em>Input-to-state safety with control barrier functions.</em> IEEE Control Systems Letters 3(1):108–113, 2019.</li>
+<li>A. Alan, A. J. Taylor, C. R. He, A. D. Ames, G. Orosz. <em>Control barrier functions and input-to-state safety with application to automated vehicles.</em> IEEE Trans. Control Systems Technology 31(6):2744–2759, 2023.</li>
+<li>S. Dean, A. J. Taylor, R. K. Cosner, B. Recht, A. D. Ames. <em>Guaranteeing safety of learned perception modules via measurement-robust control barrier functions.</em> CoRL, PMLR 155:654–670, 2021. arXiv:2010.16001.</li>
+<li>R. K. Cosner, A. W. Singletary, A. J. Taylor, T. G. Molnar, K. L. Bouman, A. D. Ames. <em>Measurement-robust control barrier functions: certainty in safety with uncertainty in state.</em> IROS, 2021. arXiv:2104.14030.</li>
+<li>M. Black, G. Fainekos, B. Hoxha, D. Prokhorov, D. Panagou. <em>Safety under uncertainty: tight bounds with risk-aware control barrier functions.</em> ICRA, 12686–12692, 2023.</li>
+<li>A. Clark. <em>Control barrier functions for complete and incomplete information stochastic systems.</em> ACC, 2019; and <em>Verification and synthesis of control barrier functions</em>, CDC, 2021.</li>
+<li>W. Xiao, C. Belta, C. G. Cassandras. <em>Adaptive control barrier functions.</em> IEEE Trans. Automatic Control 67(5):2267–2281, 2022.</li>
+<li>K. P. Wabersich, M. N. Zeilinger. <em>Predictive control barrier functions: enhanced safety mechanisms for learning-based control.</em> arXiv:2105.10241; and <em>A predictive safety filter for learning-based control of constrained nonlinear dynamical systems</em>, Automatica 129:109597, 2021.</li>
+</ol>
+</section>
+<section id="multi-agent-and-graph-cbfs-1" class="level3">
+<h3 class="anchored" data-anchor-id="multi-agent-and-graph-cbfs-1">Multi-agent and graph CBFs</h3>
+<ol start="29" type="1">
+<li>L. Wang, A. D. Ames, M. Egerstedt. <em>Safety barrier certificates for collisions-free multirobot systems.</em> IEEE Trans. Robotics 33(3):661–674, 2017.</li>
+<li>S. Zhang, O. So, K. Garg, C. Fan. <em>GCBF+: a neural graph control barrier function framework for distributed safe multiagent control.</em> IEEE Trans. Robotics 41:1533–1552, 2025. doi:10.1109/TRO.2025.3530348. Code: github.com/MIT-REALM/gcbfplus.</li>
+<li>Z. Qin, K. Zhang, Y. Chen, J. Chen, C. Fan. <em>Learning safe multi-agent control with decentralized neural barrier certificates.</em> ICLR, 2021.</li>
+<li>J. Usevitch, D. Panagou. <em>Adversarial resilience for sampled-data systems using control barrier function methods.</em> ACC, 2021.</li>
+<li>H. Parwana, A. Mustafa, D. Panagou. <em>Trust-based rate-tunable control barrier functions for non-cooperative multi-agent systems.</em> CDC, 2022.</li>
+</ol>
+</section>
+<section id="learning-rl-and-verification" class="level3">
+<h3 class="anchored" data-anchor-id="learning-rl-and-verification">Learning, RL, and verification</h3>
+<ol start="34" type="1">
+<li>R. Cheng, G. Orosz, R. M. Murray, J. W. Burdick. <em>End-to-end safe reinforcement learning through barrier functions for safety-critical continuous control tasks.</em> AAAI 33:3387–3395, 2019. arXiv:1903.08792.</li>
+<li>Y. Emam, G. Notomista, P. Glotfelter, Z. Kira, M. Egerstedt. <em>Safe reinforcement learning using robust control barrier functions.</em> arXiv:2110.05415, 2022.</li>
+<li>M. Guerrier et al.&nbsp;<em>Learning control barrier functions and their application in reinforcement learning: a survey.</em> arXiv:2404.16879, 2024.</li>
+<li>C. Dawson, S. Gao, C. Fan. <em>Safe control with learned certificates: a survey of neural Lyapunov, barrier, and contraction methods for robotics and control.</em> IEEE Trans. Robotics 39(3):1749–1767, 2023.</li>
+<li>W. Xiao, T.-H. Wang, R. Hasani, M. Chahine, A. Amini, X. Li, D. Rus. <em>BarrierNet: differentiable control barrier functions for learning of safe robot control.</em> IEEE Trans. Robotics, 2023. doi:10.1109/TRO.2023.3249564. Earlier version arXiv:2111.11277.</li>
+<li>L. Yang, B. Werner, M. de Sa, A. D. Ames. <em>CBF-RL: safety filtering reinforcement learning in training with control barrier functions.</em> arXiv:2510.14959, 2025 (rev. 2026). Humanoid hardware results on the Unitree G1.</li>
+<li>Y. Yang, Y. Jiang, Y. Liu, J. Chen, S. E. Li. <em>Model-free safe reinforcement learning through neural barrier certificate.</em> IEEE Robotics and Automation Letters 8(3):1295–1302, 2023.</li>
+<li>M. Srinivasan, A. Dabholkar, S. Coogan, P. A. Vela. <em>Synthesis of control barrier functions using a supervised machine learning approach.</em> IROS, 7139–7145, 2020. — The labelled-sample route used in Figure 10.</li>
+<li>P. Jagtap, G. J. Pappas, M. Zamani. <em>Control barrier functions for unknown nonlinear systems using Gaussian processes.</em> IEEE CDC, 2020.</li>
+<li>V. Dhiman, M. J. Khojasteh, M. Franceschetti, N. Atanasov. <em>Control barriers in Bayesian learning of system dynamics.</em> IEEE Trans. Automatic Control, 2023; and <em>Gaussian control barrier functions: a non-parametric paradigm to safety</em>, arXiv:2203.15474.</li>
+<li>C. Folkestad, Y. Chen, A. D. Ames, J. W. Burdick. <em>Data-driven safety-critical control: synthesizing control barrier functions with Koopman operators.</em> IEEE Control Systems Letters 5(6):2012–2017, 2021.</li>
+<li>H. Zhang, J. Wu, Y. Vorobeychik, A. Clark. <em>Exact verification of ReLU neural control barrier functions.</em> NeurIPS 36:5685–5705, 2023.</li>
+<li>H. Hu, Y. Yang, T. Wei, C. Liu. <em>Verification of neural control barrier functions with symbolic derivative bounds propagation.</em> CoRL, PMLR 270:1797–1814, 2024.</li>
+<li>X. Wang, L. Knoedler, F. B. Mathiesen, J. Alonso-Mora. <em>Simultaneous synthesis and verification of neural control barrier functions through branch-and-bound verification-in-the-loop training.</em> ECC, 571–578, 2024.</li>
+<li>A. Abate, D. Ahmed, A. Edwards, M. Giacobbe, A. Peruffo. <em>FOSSIL: a software tool for the formal synthesis of Lyapunov functions and barrier certificates using neural networks.</em> HSCC, 2021.</li>
+<li>A. Salamati, A. Lavaei, S. Soudjani, M. Zamani. <em>Data-driven verification and synthesis of stochastic systems via barrier certificates.</em> Automatica 159:111323, 2024.</li>
+<li>O. So, Z. Serlin, M. Mann, J. Gonzales, K. Rutledge, N. Roy, C. Fan. <em>How to train your neural control barrier function: learning safety filters for complex input-constrained systems.</em> ICRA, 2024.</li>
+</ol>
+</section>
+<section id="generative-and-foundation-model-policies-20252026" class="level3">
+<h3 class="anchored" data-anchor-id="generative-and-foundation-model-policies-20252026">Generative and foundation-model policies (2025–2026)</h3>
+<ol start="51" type="1">
+<li>W. Xiao, T.-H. Wang, C. Gan, D. Rus. <em>SafeDiffuser: safe planning with diffusion probabilistic models.</em> 2023/24 — barrier constraints inside the denoising process.</li>
+<li>K. Mizuta et al.&nbsp;<em>CoBL-Diffusion</em> — CBF-constrained diffusion planning.</li>
+<li>S. Hu, Z. Liu, S. Liu, J. Cen, Z. Meng, X. He. <em>VLSA: vision-language-action models with a plug-and-play safety constraint layer.</em> arXiv:2512.11891, 2025.</li>
+<li>Z. Feng, H. Zhang, S. Bansal. <em>From words to safety: language-conditioned safety filtering for robot navigation.</em> arXiv:2511.05889, 2025.</li>
+<li><em>ATOM-CBF: adaptive safe perception-based control under out-of-distribution measurements.</em> arXiv:2511.08741, 2025.</li>
+<li><em>Your model already knows: attention-guided safety filter for vision-language-action models.</em> arXiv:2606.09749, 2026.</li>
+<li><em>Safe vision-language-action models via barrier-enhanced flow matching.</em> arXiv:2607.29569, 2026 — log-sum-exp aggregate barriers over action chunks.</li>
+<li><em>LIBERO-Safety: a benchmark for physical and semantic safety in vision-language-action models.</em> arXiv:2606.23686, 2026.</li>
+</ol>
+<div class="note">
+<p>Bibliographic note: entries were checked against publisher or arXiv records where possible. A few 2026 preprints are cited by arXiv identifier because no journal version exists yet; for those, check for an updated version before citing them in your own work.</p>
+</div>
+
+
+</section>
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/anjalit15\.github\.io\/blog");
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

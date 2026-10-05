@@ -13,7 +13,5 @@ about:
 ---
 
 I am a researcher working on control theory and machine learning.
-This blog collects my book reviews, notes on papers I read, and
-technical posts on control.
+This blog collects my book reviews, notes on papers I read, and technical posts on control.
 
-About this blog

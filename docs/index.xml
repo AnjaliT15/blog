@@ -10,7 +10,541 @@
 <atom:link href="https://anjalit15.github.io/blog/index.xml" rel="self" type="application/rss+xml"/>
 <description>Book reviews, reading notes, and control theory</description>
 <generator>quarto-1.10.18</generator>
-<lastBuildDate>Thu, 01 Oct 2026 18:30:00 GMT</lastBuildDate>
+<lastBuildDate>Sun, 04 Oct 2026 18:30:00 GMT</lastBuildDate>
+<item>
+  <title>Control barrier functions: theory, variants, and learning-based extensions</title>
+  <dc:creator>Anjali </dc:creator>
+  <link>https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/</link>
+  <description><![CDATA[ 
+
+
+
+
+<p><em>Everything below is reproducible. The simulation code, the figure scripts and a PyTorch reference for the learning-based sections are in a companion repository: <a href="https://github.com/anjalit15/control-barrier-functions">github.com/anjalit15/control-barrier-functions</a>.</em></p>
+<section id="safety-as-set-invariance" class="level2">
+<h2 class="anchored" data-anchor-id="safety-as-set-invariance">1. Safety as set invariance</h2>
+<p>Most safety requirements in control are not statements about stability, tracking error, or optimality. They are statements about a <em>set</em>: the quadrotor stays inside the flight volume, the manipulator’s elbow stays out of the human’s workspace, the car keeps a time headway, the battery stays under temperature. Formally, given a closed set <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BC%7D%20%5Csubset%20%5Cmathbb%7BR%7D%5En"> of acceptable states, the system is safe if</p>
+<p><img src="https://latex.codecogs.com/png.latex?x(0)%20%5Cin%20%5Cmathcal%7BC%7D%20%5C;%5CLongrightarrow%5C;%20x(t)%20%5Cin%20%5Cmathcal%7BC%7D%20%5Cquad%20%5Cforall%20t%20%5Cgeq%200,"></p>
+<p>a property called <strong>forward invariance</strong>. Nagumo’s theorem tells us what this costs locally: for a set described by a smooth function <img src="https://latex.codecogs.com/png.latex?h"> as <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BC%7D%20=%20%5C%7Bx%20:%20h(x)%20%5Cgeq%200%5C%7D">, invariance requires only that on the boundary the vector field never points out of the set, <img src="https://latex.codecogs.com/png.latex?%5Cnabla%20h(x)%5Ccdot%20%5Cdot%20x%20%5Cgeq%200"> whenever <img src="https://latex.codecogs.com/png.latex?h(x)%20=%200">. Nothing is asked in the interior. This is the entire geometric content of the theory, and it is worth internalising before any algebra (Figure 1, left).</p>
+<p>A control barrier function turns that boundary condition into a constraint on the <em>input</em>, and then — crucially — relaxes it so that it holds everywhere rather than only on the boundary, which is what makes it usable inside an optimisation solved at every control step.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/figs/fig01_forward_invariance.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 1.</strong> Left: a safe set as the zero-superlevel set of <img src="https://latex.codecogs.com/png.latex?h">, with level sets of <img src="https://latex.codecogs.com/png.latex?h"> inside it. On the boundary, admissible closed-loop vector fields are those with a non-negative component along <img src="https://latex.codecogs.com/png.latex?%5Cnabla%20h"> (green normals). Right: the consequence of the CBF inequality <img src="https://latex.codecogs.com/png.latex?%5Cdot%20h%20%5Cgeq%20-%5Cgamma%20h"> — the barrier may decay, but only as slowly as <img src="https://latex.codecogs.com/png.latex?h(0)e%5E%7B-%5Cgamma%20t%7D">, so it can approach zero asymptotically and never cross it.</figcaption>
+</figure>
+</div>
+<p>Two things about the right-hand panel are worth dwelling on, because they are the most common sources of confusion. First, the CBF condition does <em>not</em> say <img src="https://latex.codecogs.com/png.latex?h"> must increase; it says <img src="https://latex.codecogs.com/png.latex?h"> may decrease at a rate that vanishes as <img src="https://latex.codecogs.com/png.latex?h%20%5Cto%200">. Second, the guarantee is about <img src="https://latex.codecogs.com/png.latex?h">, not about distance: a trajectory can ride the boundary of the safe set for ever, perfectly safe and entirely useless. Safety and liveness are separate properties, and CBFs address exactly one of them.</p>
+</section>
+<section id="the-mathematical-core" class="level2">
+<h2 class="anchored" data-anchor-id="the-mathematical-core">2. The mathematical core</h2>
+<p>Take a control-affine system, which covers most mechanical, vehicular and electrical plants after a change of variables:</p>
+<p><img src="https://latex.codecogs.com/png.latex?%5Cdot%20x%20=%20f(x)%20+%20g(x)%5C,u,%20%5Cqquad%20x%20%5Cin%20%5Cmathbb%7BR%7D%5En,%5C;%20u%20%5Cin%20%5Cmathcal%7BU%7D%20%5Csubseteq%20%5Cmathbb%7BR%7D%5Em,"></p>
+<p>with <img src="https://latex.codecogs.com/png.latex?f,%20g"> locally Lipschitz. Write <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BC%7D%20=%20%5C%7Bx%20:%20h(x)%20%5Cgeq%200%5C%7D"> for a continuously differentiable <img src="https://latex.codecogs.com/png.latex?h"> with <img src="https://latex.codecogs.com/png.latex?0"> a regular value (i.e.&nbsp;<img src="https://latex.codecogs.com/png.latex?%5Cnabla%20h(x)%20%5Cneq%200"> on <img src="https://latex.codecogs.com/png.latex?%5Cpartial%5Cmathcal%7BC%7D">, which rules out degenerate level sets).</p>
+<div class="def">
+<p><span class="tag">DEFINITION — class-K</span></p>
+<p>A continuous function <img src="https://latex.codecogs.com/png.latex?%5Calpha%20:%20(-b,%20a)%20%5Cto%20%5Cmathbb%7BR%7D"> is an <strong>extended class-<img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BK%7D"></strong> function if it is strictly increasing and <img src="https://latex.codecogs.com/png.latex?%5Calpha(0)%20=%200">. Typical choices: <img src="https://latex.codecogs.com/png.latex?%5Calpha(s)%20=%20%5Cgamma%20s">, <img src="https://latex.codecogs.com/png.latex?%5Cgamma%20s%5E3">, or <img src="https://latex.codecogs.com/png.latex?%5Cgamma%5C,%5Cmathrm%7Bsgn%7D(s)%5Csqrt%7B%7Cs%7C%7D">.</p>
+</div>
+<div class="def">
+<p><span class="tag">DEFINITION — control barrier function</span></p>
+<p><img src="https://latex.codecogs.com/png.latex?h"> is a <strong>control barrier function</strong> for the system on <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BC%7D"> if there exists an extended class-<img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BK%7D"> function <img src="https://latex.codecogs.com/png.latex?%5Calpha"> such that</p>
+<p><img src="https://latex.codecogs.com/png.latex?%5Csup_%7Bu%20%5Cin%20%5Cmathcal%7BU%7D%7D%20%5Cbig%5B%5Cunderbrace%7BL_f%20h(x)%7D_%7B%5Cnabla%20h%5Ccdot%20f%7D%20+%20%5Cunderbrace%7BL_g%20h(x)%7D_%7B%5Cnabla%20h%5Ccdot%20g%7D%5C,u%5Cbig%5D%20%5C;%5Cgeq%5C;%20-%5Calpha%5Cbig(h(x)%5Cbig)%20%5Cqquad%20%5Cforall%20x%20%5Cin%20%5Cmathcal%7BD%7D%20%5Csupseteq%20%5Cmathcal%7BC%7D."></p>
+</div>
+<div class="def">
+<p><span class="tag">THEOREM — Ames, Xu, Grizzle &amp; Tabuada (2017)</span></p>
+<p>If <img src="https://latex.codecogs.com/png.latex?h"> is a CBF on <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BC%7D">, then <em>any</em> locally Lipschitz feedback <img src="https://latex.codecogs.com/png.latex?u(x)"> taking values in</p>
+<p><img src="https://latex.codecogs.com/png.latex?K_%7B%5Cmathrm%7Bcbf%7D%7D(x)%20=%20%5C%7Bu%20%5Cin%20%5Cmathcal%7BU%7D%20:%20L_f%20h(x)%20+%20L_g%20h(x)%20u%20%5Cgeq%20-%5Calpha(h(x))%5C%7D"></p>
+<p>renders <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BC%7D"> forward invariant. Moreover <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BC%7D"> is <em>asymptotically stable</em> in <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BD%7D">: states starting outside <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BC%7D"> but inside <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BD%7D"> are driven back to it.</p>
+</div>
+<p>The asymptotic-stability half of that statement is the practical reason the relaxed (so-called <em>zeroing</em>) formulation won out over earlier reciprocal barriers that blow up at the boundary: a real system perturbed slightly outside <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BC%7D"> by noise or a discretisation artefact is pulled back rather than being handed an infinite control demand.</p>
+<section id="the-safety-filter" class="level3">
+<h3 class="anchored" data-anchor-id="the-safety-filter">The safety filter</h3>
+<p>Because the condition is affine in <img src="https://latex.codecogs.com/png.latex?u"> for fixed <img src="https://latex.codecogs.com/png.latex?x">, enforcing it while staying close to whatever controller was already there is a quadratic program with one inequality per barrier:</p>
+<p><img src="https://latex.codecogs.com/png.latex?u%5E%5Cstar(x)%20=%20%5Carg%5Cmin_%7Bu%20%5Cin%20%5Cmathcal%7BU%7D%7D%20%5C;%20%5C%7Cu%20-%20u_%7B%5Cmathrm%7Bnom%7D%7D(x)%5C%7C_W%5E2%20%5Cquad%20%5Ctext%7Bs.t.%7D%20%5Cquad%20L_f%20h(x)%20+%20L_g%20h(x)%20u%20%5Cgeq%20-%5Calpha(h(x))."></p>
+<p>This is the <strong>CBF-QP</strong>, and it is the reason CBFs are deployed so widely: it is a tiny convex problem, solvable at kilohertz rates, and it is agnostic about where <img src="https://latex.codecogs.com/png.latex?u_%7B%5Cmathrm%7Bnom%7D%7D"> came from — a hand-tuned PD loop, an MPC, a reinforcement-learning policy, or a vision-language-action model. The filter is <em>minimally invasive</em>: when the nominal input already satisfies the constraint, the filter is inactive and returns it untouched.</p>
+<div class="note">
+<p>A dual view worth knowing: with a single constraint the QP has the closed-form solution <img src="https://latex.codecogs.com/png.latex?u%5E%5Cstar%20=%20u_%7B%5Cmathrm%7Bnom%7D%7D%20+%20L_gh%5E%5Ctop%0A%5Cfrac%7B%5Cmax(0,%5C,-(L_fh%20+%20L_gh%5C,u_%7B%5Cmathrm%7Bnom%7D%7D%20+%20%5Calpha(h)))%7D%7B%5C%7CL_gh%5C%7C%5E2%7D"> — a projection onto a half-space. This is what makes differentiable CBF layers cheap inside a neural policy (Section 8.4), and closed-form filters are an active topic in their own right for resource-constrained hardware.</p>
+</div>
+</section>
+<section id="adding-performance-the-clf-cbf-qp" class="level3">
+<h3 class="anchored" data-anchor-id="adding-performance-the-clf-cbf-qp">Adding performance: the CLF-CBF-QP</h3>
+<p>If the nominal controller is itself to be synthesised, a control Lyapunov function <img src="https://latex.codecogs.com/png.latex?V"> can be stacked into the same QP as a <em>soft</em> constraint with slack <img src="https://latex.codecogs.com/png.latex?%5Cdelta">, keeping safety hard and stability negotiable:</p>
+<p><img src="https://latex.codecogs.com/png.latex?%5Cmin_%7Bu,%5Cdelta%7D%20%5C;%20%5C%7Cu%5C%7C%5E2%20+%20p%5C,%5Cdelta%5E2%20%5Cquad%20%5Ctext%7Bs.t.%7D%20%5Cquad%20L_fV%20+%20L_gV%5C,u%20%5Cleq%20-%5Clambda%20V%20+%20%5Cdelta,%20%5Cqquad%20L_fh%20+%20L_gh%5C,u%20%5Cgeq%20-%5Calpha(h)."></p>
+<p>The asymmetry is deliberate and is the standard engineering posture: never let a performance objective make a safety constraint infeasible.</p>
+</section>
+</section>
+<section id="the-filter-in-action" class="level2">
+<h2 class="anchored" data-anchor-id="the-filter-in-action">3. The filter in action</h2>
+<div class="diagram">
+<svg viewbox="0 0 980 190" xmlns="http://www.w3.org/2000/svg" aria-label="A nominal controller is projected onto the set of safe inputs">
+  <defs>
+    <marker id="ar" markerwidth="9" markerheight="9" refx="7" refy="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#17222B"></path></marker>
+  </defs>
+  <g font-family="Iowan Old Style,Georgia,serif" fill="#17222B">
+    <rect x="8" y="52" width="150" height="52" fill="#fff" stroke="#B9C5CC"></rect>
+    <text x="83" y="74" font-size="14" text-anchor="middle">task controller</text>
+    <text x="83" y="93" font-size="13" text-anchor="middle" fill="#8C99A3">RL, MPC, PD, VLA</text>
+    <line x1="158" y1="78" x2="212" y2="78" stroke="#17222B" marker-end="url(#ar)"></line>
+    <text x="185" y="68" font-size="12.5" text-anchor="middle" fill="#8C99A3">u_nom</text>
+
+    <rect x="212" y="38" width="196" height="80" fill="#EEF4F2" stroke="#1F6F5C"></rect>
+    <text x="310" y="63" font-size="14" text-anchor="middle">safety filter</text>
+    <text x="310" y="84" font-size="13.5" text-anchor="middle" font-style="italic">
+      min ‖u − u_nom‖²</text>
+    <text x="310" y="103" font-size="13" text-anchor="middle" fill="#1F6F5C">
+      s.t. ḣ ≥ −α(h),  u ∈ U</text>
+    <line x1="408" y1="78" x2="462" y2="78" stroke="#17222B" marker-end="url(#ar)"></line>
+    <text x="435" y="68" font-size="12.5" text-anchor="middle" fill="#2C5F8E">u*</text>
+
+    <rect x="462" y="52" width="120" height="52" fill="#fff" stroke="#B9C5CC"></rect>
+    <text x="522" y="82" font-size="14" text-anchor="middle">plant</text>
+    <path d="M582,78 L640,78" stroke="#17222B" marker-end="url(#ar)"></path>
+    <path d="M612,78 L612,150 L120,150 L120,104" fill="none" stroke="#B9C5CC" stroke-dasharray="4 3" marker-end="url(#ar)"></path>
+    <text x="366" y="145" font-size="12" fill="#8C99A3">state / estimate x̂</text>
+
+    <circle cx="790" cy="78" r="46" fill="#A43326" fill-opacity="0.14" stroke="#A43326"></circle>
+    <text x="790" y="82" font-size="12.5" text-anchor="middle" fill="#A43326">h &lt; 0</text>
+    <path d="M660,140 C700,140 742,126 762,104" fill="none" stroke="#8C99A3" stroke-dasharray="5 3" stroke-width="2"></path>
+    <path d="M660,140 C706,138 742,110 752,44 C790,20 840,30 880,52" fill="none" stroke="#2C5F8E" stroke-width="2.2"></path>
+    <text x="884" y="70" font-size="12.5" fill="#2C5F8E">safe</text>
+    <text x="700" y="122" font-size="12.5" fill="#8C99A3">nominal</text>
+  </g>
+</svg>
+<div class="dcap">The architecture in one line: the
+safety filter sits between whatever produces the nominal input and the actuator,
+and is indifferent to what that producer is.</div></div>
+<div class="note">
+<p>Every figure below is the output of a simulation rather than an illustration. The code behind all of them — a small CBF toolbox, the twelve experiments, and a PyTorch reference for the learning-based sections — is in the companion repository linked at the top of this post.</p>
+</div>
+<p>Figure 2 dissects one step of the QP on a velocity-controlled robot with a circular keep-out zone, <img src="https://latex.codecogs.com/png.latex?h(p)%20=%20%5C%7Cp%20-%20c%5C%7C%20-%20r">. The right-hand middle panel is the one to study: at each instant the CBF condition cuts input space with a half-plane, the actuator limits cut it with a box, and the filter returns the point of the intersection closest to <img src="https://latex.codecogs.com/png.latex?u_%7B%5Cmathrm%7Bnom%7D%7D">.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/figs/fig03_cbf_qp_filter.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 2.</strong> Anatomy of a CBF-QP. Left: the nominal go-to-goal controller drives straight through the obstacle; the filtered controller does not. Middle: input space at the instant of largest intervention, showing the admissible set <img src="https://latex.codecogs.com/png.latex?K_%7B%5Cmathrm%7Bcbf%7D%7D(x)"> (green), the actuator box <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BU%7D"> (dotted), and the projection of <img src="https://latex.codecogs.com/png.latex?u_%7B%5Cmathrm%7Bnom%7D%7D"> onto it. Right: the correction is zero until it is needed, and the barrier stays non-negative where the unfiltered loop reaches <img src="https://latex.codecogs.com/png.latex?h%20%5Capprox%20-0.9"> m.</figcaption>
+</figure>
+</div>
+<section id="the-class-mathcalk-function-is-a-design-decision-not-a-formality" class="level3">
+<h3 class="anchored" data-anchor-id="the-class-mathcalk-function-is-a-design-decision-not-a-formality">The class-<img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BK%7D"> function is a design decision, not a formality</h3>
+<p>Every CBF condition hides a tuning knob whose effect is larger than most practitioners expect. A small gain makes the constraint bite early and far from the boundary, producing wide, cautious detours; a large gain lets the system approach at speed and brake late, hugging <img src="https://latex.codecogs.com/png.latex?%5Cpartial%5Cmathcal%7BC%7D">. The same barrier and the same plant therefore give qualitatively different behaviour (Figure 3).</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/figs/fig02_class_k.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 3.</strong> One plant, one barrier, three class-<img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BK%7D"> functions. The cautious linear gain (blue) begins intervening at <img src="https://latex.codecogs.com/png.latex?t%20%5Capprox%200.5"> s and keeps a visible margin; the aggressive gain (gold) intervenes late and rides <img src="https://latex.codecogs.com/png.latex?h%20%5Capprox%200">; the cubic choice is permissive far from the boundary and firm near it. All three are provably safe — they differ only in conservatism.</figcaption>
+</figure>
+</div>
+<p>A large literature exists purely on choosing and adapting this function: adaptive CBFs make <img src="https://latex.codecogs.com/png.latex?%5Calpha"> state- or time-dependent, penalty and optimal-decay formulations solve for it inside the QP, and learning-based schemes tune it from data (Sections 7.4 and 8.4). If a CBF deployment feels either paralysed or reckless, this is the first thing to inspect.</p>
+</section>
+<section id="a-canonical-benchmark-adaptive-cruise-control" class="level3">
+<h3 class="anchored" data-anchor-id="a-canonical-benchmark-adaptive-cruise-control">A canonical benchmark: adaptive cruise control</h3>
+<p>The example that launched much of this literature is worth reproducing because it exercises everything at once: nontrivial drift dynamics, a hard actuator bound, a performance objective in direct conflict with safety, and a barrier with clear physical meaning. With ego speed <img src="https://latex.codecogs.com/png.latex?v">, headway <img src="https://latex.codecogs.com/png.latex?z"> to a lead vehicle, and rolling resistance <img src="https://latex.codecogs.com/png.latex?F_r(v)%20=%20f_0%20+%20f_1%20v%20+%20f_2%20v%5E2">,</p>
+<p><img src="https://latex.codecogs.com/png.latex?%5Cdot%20v%20=%20%5Cfrac%7B-F_r(v)%20+%20u%7D%7Bm%7D,%20%5Cqquad%20%5Cdot%20z%20=%20v_%7B%5Cmathrm%7Blead%7D%7D%20-%20v,%20%5Cqquad%20h(x)%20=%20z%20-%20%5Ctau%20v,%20%5Cquad%20%5Ctau%20=%201.8%5C%20%5Cmathrm%7Bs%7D."></p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/figs/fig04_acc.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 4.</strong> Adaptive cruise control with <img src="https://latex.codecogs.com/png.latex?m=1650"> kg, a <img src="https://latex.codecogs.com/png.latex?%5Cpm%200.3g"> wheel-force limit, desired speed 24 m/s and a lead vehicle at 13.9 m/s. The cruise controller alone tracks <img src="https://latex.codecogs.com/png.latex?v_d"> and collides (dashed headway crosses zero). The CBF-QP tracks <img src="https://latex.codecogs.com/png.latex?v_d"> until the 1.8 s headway constraint activates at <img src="https://latex.codecogs.com/png.latex?t%20%5Capprox%206"> s, brakes hard against the actuator limit, and settles exactly on the constraint boundary with the lead vehicle’s speed.</figcaption>
+</figure>
+</div>
+<p>Note the shape of the filtered wheel-force trace: the filter does nothing for six seconds, saturates the actuator for about two, then hands control back. That signature — long idle, brief decisive intervention — is what a healthy safety filter looks like in logs, and its absence is diagnostic (Section 9).</p>
+</section>
+</section>
+<section id="relative-degree-and-high-order-cbfs" class="level2">
+<h2 class="anchored" data-anchor-id="relative-degree-and-high-order-cbfs">4. Relative degree and high-order CBFs</h2>
+<p>The definition above quietly assumes <img src="https://latex.codecogs.com/png.latex?L_g%20h(x)%20%5Cneq%200">: the input must appear in <img src="https://latex.codecogs.com/png.latex?%5Cdot%20h">. It very often does not. Position constraints on a mechanical system are the standard case — for a double integrator <img src="https://latex.codecogs.com/png.latex?%5Cddot%20p%20=%20u"> with <img src="https://latex.codecogs.com/png.latex?h_0(p)%20=%20%5C%7Cp%20-%20c%5C%7C%5E2%20-%20r%5E2">, we get <img src="https://latex.codecogs.com/png.latex?L_g%20h_0%20%5Cequiv%200">, and the CBF-QP becomes vacuous: no choice of <img src="https://latex.codecogs.com/png.latex?u"> affects the constraint, so the filter is structurally incapable of enforcing anything. It will report feasibility right up to the collision (Figure 5, dashed).</p>
+<p>The fix is to differentiate until the input appears, enforcing a chain of conditions. With <img src="https://latex.codecogs.com/png.latex?%5Cpsi_0%20=%20h_0"> and</p>
+<p><img src="https://latex.codecogs.com/png.latex?%5Cpsi_i(x)%20=%20%5Cdot%5Cpsi_%7Bi-1%7D(x)%20+%20%5Calpha_i%5Cbig(%5Cpsi_%7Bi-1%7D(x)%5Cbig),%20%5Cqquad%20i%20=%201,%5Cdots,q,"></p>
+<p>where <img src="https://latex.codecogs.com/png.latex?q"> is the relative degree, the requirement <img src="https://latex.codecogs.com/png.latex?%5Cpsi_q%20%5Cgeq%200"> is affine in <img src="https://latex.codecogs.com/png.latex?u"> and the <strong>high-order CBF</strong> (HOCBF) of Xiao and Belta renders the intersection <img src="https://latex.codecogs.com/png.latex?%5Cbigcap_i%20%5C%7B%5Cpsi_i%20%5Cgeq%200%5C%7D"> forward invariant. The exponential CBF of Nguyen and Sreenath is the special case with linear <img src="https://latex.codecogs.com/png.latex?%5Calpha_i">, where the gains are chosen by placing the poles of a linear system in <img src="https://latex.codecogs.com/png.latex?%5Cpsi">.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/figs/fig05_hocbf.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 5.</strong> Relative degree 2. Dashed: applying the first-order condition to <img src="https://latex.codecogs.com/png.latex?h_0"> directly — <img src="https://latex.codecogs.com/png.latex?L_gh_0%20%5Cequiv%200">, so the QP cannot act and the trajectory passes through the obstacle (<img src="https://latex.codecogs.com/png.latex?h_0"> reaches <img src="https://latex.codecogs.com/png.latex?-1">). Solid: the HOCBF chain with <img src="https://latex.codecogs.com/png.latex?%5Cpsi_1%20=%20%5Cdot%20h_0%20+%20%5Calpha_1(h_0)"> brakes in time, keeps <img src="https://latex.codecogs.com/png.latex?h_0%20%5Cgeq%200">, and still reaches the goal. Bottom right: the second-level function <img src="https://latex.codecogs.com/png.latex?%5Cpsi_1"> remains non-negative, which is what the theorem actually certifies.</figcaption>
+</figure>
+</div>
+<div class="warn">
+<p><span class="tag">PITFALL</span></p>
+<p>The HOCBF certifies invariance of the <em>intersection</em> of the level sets, not of <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BC%7D"> alone. Initial states in <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BC%7D"> with <img src="https://latex.codecogs.com/png.latex?%5Cpsi_1%20%3C%200"> — physically, already moving too fast toward the obstacle to stop — are outside the certified set, and no controller could save them under the input limits. Checking <img src="https://latex.codecogs.com/png.latex?%5Cpsi_i(x_0)%20%5Cgeq%200"> for all <img src="https://latex.codecogs.com/png.latex?i"> at initialisation is not optional.</p>
+</div>
+</section>
+<section id="where-the-guarantee-quietly-fails" class="level2">
+<h2 class="anchored" data-anchor-id="where-the-guarantee-quietly-fails">5. Where the guarantee quietly fails</h2>
+<p>The CBF theorem is airtight; deployments still fail, because the theorem’s hypotheses are stronger than they look. The four failure modes below account for the large majority of practical trouble, and the recent literature is largely organised around them.</p>
+<section id="model-error-and-disturbances" class="level3">
+<h3 class="anchored" data-anchor-id="model-error-and-disturbances">5.1 Model error and disturbances</h3>
+<p>The condition is evaluated with a model. Under <img src="https://latex.codecogs.com/png.latex?%5Cdot%20x%20=%20f(x)%20+%20g(x)u%20+%20d(t)"> with <img src="https://latex.codecogs.com/png.latex?%5C%7Cd%5C%7C%20%5Cleq%20%5Cdelta">, the honest condition subtracts the worst case, <img src="https://latex.codecogs.com/png.latex?L_fh%20+%20L_gh%5C,u%20-%20%5Cdelta%5C%7C%5Cnabla%20h%5C%7C%20%5Cgeq%20-%5Calpha(h)">, which costs control authority up front. <strong>Input-to-state safety</strong> (ISSf) instead tempers the condition with a tunable term,</p>
+<p><img src="https://latex.codecogs.com/png.latex?L_fh%20+%20L_gh%5C,u%20%5C;%5Cgeq%5C;%20-%5Calpha(h)%20+%20%5Ctfrac%7B1%7D%7B%5Cvarepsilon%7D%5C%7CL_gh%5C%7C%5E2%20,"></p>
+<p>which renders invariant a slightly shrunken subset of <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BC%7D"> whose deficit is bounded in terms of <img src="https://latex.codecogs.com/png.latex?%5Cvarepsilon"> and the disturbance magnitude: a quantified loss of safe set instead of a lost guarantee. Larger <img src="https://latex.codecogs.com/png.latex?%5Cvarepsilon"> recovers the nominal condition, smaller <img src="https://latex.codecogs.com/png.latex?%5Cvarepsilon"> buys margin.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/figs/fig06_robust_issf.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 6.</strong> A drift pushing the robot toward the obstacle, <img src="https://latex.codecogs.com/png.latex?%5C%7Cd%5C%7C%20%5Cleq%200.55">. The nominal CBF, which assumes its model, loses the guarantee entirely (<img src="https://latex.codecogs.com/png.latex?h"> reaches <img src="https://latex.codecogs.com/png.latex?-0.5">); the robust and ISSf forms keep <img src="https://latex.codecogs.com/png.latex?h%20%5Cgeq%200"> at the cost of a wider detour. Right: the worst-case margin as the disturbance bound grows — the nominal filter degrades linearly into violation while both robust forms stay non-negative until control authority runs out.</figcaption>
+</figure>
+</div>
+</section>
+<section id="input-limits-and-pointwise-feasibility" class="level3">
+<h3 class="anchored" data-anchor-id="input-limits-and-pointwise-feasibility">5.2 Input limits and pointwise feasibility</h3>
+<p>Nothing guarantees that <img src="https://latex.codecogs.com/png.latex?K_%7B%5Cmathrm%7Bcbf%7D%7D(x)%20%5Ccap%20%5Cmathcal%7BU%7D"> is non-empty. A CBF valid for unbounded inputs can be infeasible for the real actuator, and stacking several barriers makes conflicts likelier still: two individually satisfiable constraints may have no common solution. The standard responses are <strong>input-constrained CBFs</strong> (which build the chain so that feasibility is maintained under <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BU%7D">), <strong>backup CBFs</strong> (which define the safe set implicitly as the states from which a known backup controller can keep the system safe, computed by forward simulation), soft-min and soft-max compositions of multiple barriers, and slack relaxation with a high penalty — which converts a solver failure into a quantified, logged safety degradation. The last is not a guarantee, but on hardware it beats an exception.</p>
+</section>
+<section id="undesired-equilibria-and-deadlock" class="level3">
+<h3 class="anchored" data-anchor-id="undesired-equilibria-and-deadlock">5.3 Undesired equilibria and deadlock</h3>
+<p>Pointwise optimality says nothing about where the closed loop ends up. The minimum-norm safe input can cancel the goal-seeking term exactly, creating asymptotically stable equilibria on <img src="https://latex.codecogs.com/png.latex?%5Cpartial%5Cmathcal%7BC%7D"> — a robot that is provably safe and permanently stuck. This is not an artefact of a bad barrier: recent analysis shows the equilibria and their stability are properties of the <em>filter geometry</em>, largely independent of which valid CBF is used, and that CBF filters can also induce limit cycles and unbounded trajectories.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/figs/fig08_deadlock.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 7.</strong> Deadlock. With the obstacle exactly between start and goal (red), the filtered input collapses to zero at a stable equilibrium one metre from the obstacle centre: safe for ever, never arriving. Rotating the nominal controller by <img src="https://latex.codecogs.com/png.latex?20%5E%5Ccirc"> (blue) removes the equilibrium and the task completes — the cure lives in the nominal controller, not in the barrier.</figcaption>
+</figure>
+</div>
+</section>
+<section id="sampled-data-zero-order-hold-and-estimated-state" class="level3">
+<h3 class="anchored" data-anchor-id="sampled-data-zero-order-hold-and-estimated-state">5.4 Sampled data, zero-order hold, and estimated state</h3>
+<p>The guarantee is continuous-time; the implementation samples. Between control instants the input is held, and <img src="https://latex.codecogs.com/png.latex?h"> can dip below zero even though every QP was feasible. A margin proportional to the control period restores safety for the sampled-data loop, and self-triggered or event-triggered variants compute how long the current input may safely be held.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/figs/fig09_sampled_data.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 8.</strong> Sampled-data effects with the integration error removed (25 substeps per control period), so the only error is the zero-order hold. Left: at <img src="https://latex.codecogs.com/png.latex?%5CDelta%20t%20=%200.5"> s the barrier goes negative despite every QP being satisfied at the sampling instants. Right: tightening the condition by <img src="https://latex.codecogs.com/png.latex?u_%7B%5Cmax%7D%5CDelta%20t"> keeps <img src="https://latex.codecogs.com/png.latex?%5Cmin_t%20h%20%3E%200"> across the whole range of control periods.</figcaption>
+</figure>
+</div>
+<p>The same argument applies to the state itself. If <img src="https://latex.codecogs.com/png.latex?h"> is evaluated at an estimate <img src="https://latex.codecogs.com/png.latex?%5Chat%20x"> rather than <img src="https://latex.codecogs.com/png.latex?x"> — invariably true when perception is in the loop — the condition certifies nothing about the true state. That gap is exactly what measurement-robust CBFs close, and it is important enough to deserve its own entry in the taxonomy (Section 7.7).</p>
+</section>
+</section>
+<section id="how-the-family-is-organised" class="level2">
+<h2 class="anchored" data-anchor-id="how-the-family-is-organised">6. How the family is organised</h2>
+<p>There are now well over a hundred named CBF variants, and reading them as a flat list is hopeless. Almost all of them are answers to one of five questions about the basic condition <img src="https://latex.codecogs.com/png.latex?%5Cdot%20h%20%5Cgeq%20-%5Calpha(h)"> — what the dynamics look like, how the input reaches the barrier, what is uncertain, how many agents there are, and where <img src="https://latex.codecogs.com/png.latex?h"> itself came from. Placing a new paper on these axes usually predicts both its content and its limitations before reading the details.</p>
+<div class="diagram"><svg viewbox="0 0 980 430" xmlns="http://www.w3.org/2000/svg" aria-label="Five axes along which control barrier functions vary"><g font-family="Iowan Old Style,Georgia,serif" fill="#17222B"><rect x="8" y="177" width="132" height="64" fill="#fff" stroke="#17222B" stroke-width="1.4"></rect><text x="74" y="203" font-size="13.5" text-anchor="middle">the CBF</text><text x="74" y="223" font-size="13" text-anchor="middle" fill="#1F6F5C">condition</text><path d="M140,209 C180,209 180,46 218,46" fill="none" stroke="#B9C5CC" stroke-width="1.2"></path><text x="224" y="51" font-size="13" font-style="italic">What are the dynamics?</text><g><rect x="224" y="64" width="170" height="24" rx="12" fill="#fff" stroke="#B9C5CC" stroke-width="0.9"></rect><text x="309" y="80" font-size="12.2" text-anchor="middle">continuous-time (ZCBF)</text></g><g><rect x="402.0" y="64" width="107" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="456" y="80" font-size="12.2" text-anchor="middle">discrete-time</text></g><g><rect x="517.0" y="64" width="100" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="567" y="80" font-size="12.2" text-anchor="middle">sampled-data</text></g><g><rect x="625.0" y="64" width="86" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="668" y="80" font-size="12.2" text-anchor="middle">stochastic</text></g><g><rect x="719.0" y="64" width="142" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="790" y="80" font-size="12.2" text-anchor="middle">hybrid / impulsive</text></g><path d="M140,209 C180,209 180,120 218,120" fill="none" stroke="#B9C5CC" stroke-width="1.2"></path><text x="224" y="125" font-size="13" font-style="italic">How does the input enter?</text><g><rect x="224" y="138" width="135" height="24" rx="12" fill="#fff" stroke="#B9C5CC" stroke-width="0.9"></rect><text x="292" y="154" font-size="12.2" text-anchor="middle">relative degree 1</text></g><g><rect x="367.0" y="138" width="149" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="442" y="154" font-size="12.2" text-anchor="middle">HOCBF / exponential</text></g><g><rect x="524.0" y="138" width="135" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="592" y="154" font-size="12.2" text-anchor="middle">input-constrained</text></g><g><rect x="667.0" y="138" width="58" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="696" y="154" font-size="12.2" text-anchor="middle">backup</text></g><g><rect x="733.0" y="138" width="163" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="814" y="154" font-size="12.2" text-anchor="middle">non-smooth / soft-min</text></g><path d="M140,209 C180,209 180,194 218,194" fill="none" stroke="#B9C5CC" stroke-width="1.2"></path><text x="224" y="199" font-size="13" font-style="italic">What is uncertain?</text><g><rect x="224" y="212" width="58" height="24" rx="12" fill="#fff" stroke="#B9C5CC" stroke-width="0.9"></rect><text x="253" y="228" font-size="12.2" text-anchor="middle">robust</text></g><g><rect x="290.0" y="212" width="44" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="312" y="228" font-size="12.2" text-anchor="middle">ISSf</text></g><g><rect x="342.0" y="212" width="72" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="378" y="228" font-size="12.2" text-anchor="middle">adaptive</text></g><g><rect x="422.0" y="212" width="135" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="490" y="228" font-size="12.2" text-anchor="middle">risk-aware / CVaR</text></g><g><rect x="565.0" y="212" width="142" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="636" y="228" font-size="12.2" text-anchor="middle">measurement-robust</text></g><path d="M140,209 C180,209 180,268 218,268" fill="none" stroke="#B9C5CC" stroke-width="1.2"></path><text x="224" y="273" font-size="13" font-style="italic">Who is the system?</text><g><rect x="224" y="286" width="100" height="24" rx="12" fill="#fff" stroke="#B9C5CC" stroke-width="0.9"></rect><text x="274" y="302" font-size="12.2" text-anchor="middle">single agent</text></g><g><rect x="332.0" y="286" width="163" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="414" y="302" font-size="12.2" text-anchor="middle">graph / decentralised</text></g><g><rect x="503.0" y="286" width="86" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="546" y="302" font-size="12.2" text-anchor="middle">mean-field</text></g><g><rect x="597.0" y="286" width="156" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="675" y="302" font-size="12.2" text-anchor="middle">adversarially robust</text></g><path d="M140,209 C180,209 180,342 218,342" fill="none" stroke="#B9C5CC" stroke-width="1.2"></path><text x="224" y="347" font-size="13" font-style="italic">Where does the barrier come from?</text><g><rect x="224" y="360" width="107" height="24" rx="12" fill="#fff" stroke="#B9C5CC" stroke-width="0.9"></rect><text x="278" y="376" font-size="12.2" text-anchor="middle">hand-designed</text></g><g><rect x="339.0" y="360" width="114" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="396" y="376" font-size="12.2" text-anchor="middle">sum-of-squares</text></g><g><rect x="461.0" y="360" width="128" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="525" y="376" font-size="12.2" text-anchor="middle">Gaussian process</text></g><g><rect x="597.0" y="360" width="58" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="626" y="376" font-size="12.2" text-anchor="middle">neural</text></g><g><rect x="663.0" y="360" width="163" height="24" rx="12" fill="#EEF4F2" stroke="#1F6F5C" stroke-width="0.9"></rect><text x="744" y="376" font-size="12.2" text-anchor="middle">Koopman / behavioural</text></g></g></svg><div class="dcap">Five axes of variation. The white pill in each row is the textbook default; the rest are the named variants covered in Section 7. Most published methods combine two or three — for example GCBF+ is a neural, graph-structured, discrete-time-implemented barrier, and MR-CBF is a measurement-robust, backup-set construction.</div></div>
+<p>Two caveats before the catalogue. First, the axes are not independent: a learned barrier for a multi-agent system with perception in the loop inherits the difficulties of all three axes and needs the fixes from all three. Second, the names are not standardised — <em>adaptive CBF</em> means at least three different things in the literature (parameter adaptation in the plant model, online tuning of <img src="https://latex.codecogs.com/png.latex?%5Calpha">, and time-varying safe sets), so read definitions rather than titles.</p>
+</section>
+<section id="the-variants-one-axis-at-a-time" class="level2">
+<h2 class="anchored" data-anchor-id="the-variants-one-axis-at-a-time">7. The variants, one axis at a time</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Variant</th>
+<th>What it changes</th>
+<th>Use it when</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>HOCBF / exponential</strong></td>
+<td>Chain of conditions <img src="https://latex.codecogs.com/png.latex?%5Cpsi_i"> up to the relative degree</td>
+<td>The input does not appear in <img src="https://latex.codecogs.com/png.latex?%5Cdot%20h"> (position constraints, most robots)</td>
+<td>More gains to tune; certified set shrinks to <img src="https://latex.codecogs.com/png.latex?%5Cbigcap_i%5C%7B%5Cpsi_i%5Cgeq%200%5C%7D"></td>
+</tr>
+<tr class="even">
+<td><strong>Discrete-time CBF</strong></td>
+<td><img src="https://latex.codecogs.com/png.latex?h(x_%7Bk+1%7D)%20-%20h(x_k)%20%5Cgeq%20-%5Calpha(h(x_k))"></td>
+<td>The controller is genuinely discrete, or inside an MPC</td>
+<td>Condition is nonlinear in <img src="https://latex.codecogs.com/png.latex?u"> unless the plant is affine in the step</td>
+</tr>
+<tr class="odd">
+<td><strong>Sampled-data CBF</strong></td>
+<td>Adds a hold margin over the control period</td>
+<td>Always, on real hardware</td>
+<td>Conservatism proportional to <img src="https://latex.codecogs.com/png.latex?%5CDelta%20t"></td>
+</tr>
+<tr class="even">
+<td><strong>Stochastic CBF</strong></td>
+<td>Diffusion term via Itô; exit-probability bounds</td>
+<td>Noise is better modelled as a process than a bound</td>
+<td>Guarantees become probabilistic</td>
+</tr>
+<tr class="odd">
+<td><strong>Robust CBF</strong></td>
+<td>Subtracts <img src="https://latex.codecogs.com/png.latex?%5Cdelta%5C%7C%5Cnabla%20h%5C%7C"> or a differential-inclusion term</td>
+<td>A hard bound on the disturbance is available</td>
+<td>Pays worst case at all times</td>
+</tr>
+<tr class="even">
+<td><strong>ISSf-CBF</strong></td>
+<td>Tempering term; invariance of a slightly enlarged set</td>
+<td>The worst case is too expensive to pay</td>
+<td>Quantified, not zero, degradation</td>
+</tr>
+<tr class="odd">
+<td><strong>Risk-aware / CVaR</strong></td>
+<td>Tail-risk constraint instead of worst case</td>
+<td>Heavy-tailed uncertainty; a risk budget exists</td>
+<td>Needs a distribution or samples</td>
+</tr>
+<tr class="even">
+<td><strong>Adaptive CBF</strong></td>
+<td>Adapts plant parameters, <img src="https://latex.codecogs.com/png.latex?%5Calpha">, or the set online</td>
+<td>Parametric uncertainty, or fixed gains are too conservative</td>
+<td>Guarantee holds along the adaptation law, not pointwise</td>
+</tr>
+<tr class="odd">
+<td><strong>Input-constrained CBF</strong></td>
+<td>Builds the chain so <img src="https://latex.codecogs.com/png.latex?K_%7B%5Cmathrm%7Bcbf%7D%7D%5Ccap%5Cmathcal%7BU%7D%20%5Cneq%20%5Cemptyset"></td>
+<td>Saturating actuators with high relative degree</td>
+<td>Construction is problem-specific</td>
+</tr>
+<tr class="even">
+<td><strong>Backup CBF</strong></td>
+<td>Implicit safe set = states a backup policy can hold</td>
+<td>No analytic CBF exists under the input limits</td>
+<td>Forward simulation per step; sensitivity propagation</td>
+</tr>
+<tr class="odd">
+<td><strong>Graph CBF</strong></td>
+<td>Barrier defined on a neighbourhood, not the joint state</td>
+<td>Many agents, local sensing, changing topology</td>
+<td>Needs an attention/locality argument to stay valid</td>
+</tr>
+<tr class="even">
+<td><strong>Measurement-robust CBF</strong></td>
+<td>Adds <img src="https://latex.codecogs.com/png.latex?a(y)%20+%20b(y)%5C%7Cu%5C%7C"> for state-estimate error</td>
+<td><img src="https://latex.codecogs.com/png.latex?h"> is evaluated on perception output</td>
+<td>Condition becomes a second-order cone constraint</td>
+</tr>
+<tr class="odd">
+<td><strong>Predictive CBF</strong></td>
+<td>Looks ahead over a horizon before committing</td>
+<td>Myopic filtering causes deadlock or infeasibility</td>
+<td>Solves an optimisation, not a QP</td>
+</tr>
+<tr class="even">
+<td><strong>Neural CBF</strong></td>
+<td><img src="https://latex.codecogs.com/png.latex?h_%5Ctheta"> is a network trained from data</td>
+<td>The safe set is high-dimensional or defined by data</td>
+<td>Needs verification to mean anything</td>
+</tr>
+</tbody>
+</table>
+<section id="dynamics-discrete-time-sampled-data-stochastic" class="level3">
+<h3 class="anchored" data-anchor-id="dynamics-discrete-time-sampled-data-stochastic">7.1 Dynamics: discrete-time, sampled-data, stochastic</h3>
+<p>The discrete-time CBF replaces the derivative with a difference, <img src="https://latex.codecogs.com/png.latex?h(x_%7Bk+1%7D)%20-%20h(x_k)%20%5Cgeq%20-%5Calpha(h(x_k))">, which is natural when the controller is a digital loop or the barrier sits inside an MPC — the combination of discrete-time CBFs with MPC is now a standard safety-critical MPC formulation. High-order and adaptive discrete-time versions extend this to high relative degree and to time-varying penalty functions that recover feasibility. A subtlety: the discrete condition is generally <em>nonlinear</em> in <img src="https://latex.codecogs.com/png.latex?u">, so the tidy QP structure is not automatic. Truncated-Taylor and predictive constructions have been proposed to get high-order behaviour with a single class-<img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BK%7D"> function instead of a tuned chain.</p>
+<p>Stochastic CBFs treat noise as a diffusion and produce bounds on the probability of leaving the safe set over a horizon, rather than deterministic invariance. If the physical noise is genuinely unbounded — most sensor noise is — this is the honest formulation, and its guarantee is correspondingly probabilistic.</p>
+</section>
+<section id="input-channel-high-order-input-constrained-backup-non-smooth" class="level3">
+<h3 class="anchored" data-anchor-id="input-channel-high-order-input-constrained-backup-non-smooth">7.2 Input channel: high-order, input-constrained, backup, non-smooth</h3>
+<p>Section 4 covered HOCBFs. The other three all exist because of actuator limits. Input-constrained CBFs generalise the HOCBF chain so that feasibility under <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BU%7D"> is maintained by construction, including non-uniform relative degrees across input channels. Backup CBFs abandon the analytic route: define the safe set implicitly as the states from which a simple, known backup controller (full braking, hover, sit) keeps the system safe, and evaluate it by integrating the backup trajectory forward at every step — expensive but remarkably effective, and now with closed-form solutions for the bounded-input case. Soft-min and soft-max compositions collapse many constraints into one smooth barrier (the log-sum-exp aggregation in <code>cbf_core.soft_min</code>), which is also what makes closed-form filtering possible for multi-constraint problems.</p>
+</section>
+<section id="uncertainty-robust-issf-risk-aware" class="level3">
+<h3 class="anchored" data-anchor-id="uncertainty-robust-issf-risk-aware">7.3 Uncertainty: robust, ISSf, risk-aware</h3>
+<p>Covered in Section 5.1. The distinction worth carrying: robust and ISSf formulations need a <em>bound</em>; stochastic and risk-aware formulations need a <em>distribution</em> or samples. Choosing between them is a modelling decision about what you actually know, and Bayesian and CVaR variants for discrete-time systems with learned dynamics are an active 2026 topic.</p>
+</section>
+<section id="adaptation-and-parameter-tuning" class="level3">
+<h3 class="anchored" data-anchor-id="adaptation-and-parameter-tuning">7.4 Adaptation and parameter tuning</h3>
+<p>Adaptive CBFs address parametric uncertainty in <img src="https://latex.codecogs.com/png.latex?f,%20g"> by adapting the parameter estimate along with the barrier condition, so the guarantee holds along the adaptation law. Separately — and confusingly under the same name — a large body of work adapts the class-<img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BK%7D"> function or the CBF parameters online to reduce conservatism: optimal-decay CBFs solve for the decay rate inside the QP with guaranteed pointwise feasibility; penalty and rate-tunable formulations modulate how hard each constraint pushes; learning-based schemes predict good parameters from the local environment with uncertainty-aware verification of the candidate values before use.</p>
+</section>
+<section id="multi-agent-and-graph-cbfs" class="level3">
+<h3 class="anchored" data-anchor-id="multi-agent-and-graph-cbfs">7.5 Multi-agent and graph CBFs</h3>
+<p>For <img src="https://latex.codecogs.com/png.latex?N"> agents, writing a single barrier on the joint state scales badly and must be redesigned whenever <img src="https://latex.codecogs.com/png.latex?N"> changes. Pairwise barriers with a responsibility split are the classical decentralised answer, and they work — but they are myopic, and the induced local policy jams in congested configurations (Figure 9).</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/figs/fig07_graph_cbf.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 9.</strong> Eight agents swapping antipodal positions with hand-designed pairwise barriers, each agent solving its own QP over neighbours inside a 1.8 m sensing radius. Middle: the neighbour graph at <img src="https://latex.codecogs.com/png.latex?t=5"> s — the constraint structure is a graph whose edges appear and vanish as agents move. Right: the closest pair rides exactly on the collision threshold, so safety holds throughout, but the group congests near the centre and several agents stall short of their goals. Learned graph certificates target exactly this performance gap, not the safety property.</figcaption>
+</figure>
+</div>
+<p>The <strong>graph CBF</strong> (GCBF) formalises the locality that pairwise schemes use implicitly: the barrier is a function of an agent’s neighbourhood <img src="https://latex.codecogs.com/png.latex?%5Cbar%20x_%7B%5Cmathcal%7BN%7D_i%7D"> rather than the joint state, with the requirement that nodes outside the sensing radius <img src="https://latex.codecogs.com/png.latex?R"> do not affect its value — a condition that keeps <img src="https://latex.codecogs.com/png.latex?h"> continuously differentiable even though the <em>index set</em> <img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BN%7D_i(t)"> jumps as agents enter and leave the radius. That gives a single certificate valid for an arbitrary number of agents. GCBF+ parameterises it with a graph neural network together with a distributed policy, consumes LiDAR point clouds instead of ground-truth states, and was demonstrated on drone swarms and in simulations scaling to hundreds of agents, outperforming both hand-designed CBF baselines and leading multi-agent RL. Mean-field CBFs push the same idea to the swarm limit, deriving constraints on a distribution rather than on individuals.</p>
+</section>
+<section id="adversarial-and-non-cooperative-settings" class="level3">
+<h3 class="anchored" data-anchor-id="adversarial-and-non-cooperative-settings">7.6 Adversarial and non-cooperative settings</h3>
+<p>The pairwise construction above assumes every agent does its share. If some do not — faulty, selfish, or adversarial — the split is invalid. Adversarially robust CBFs assume a bounded number of misbehaving neighbours and keep the guarantee against their worst-case inputs; trust-based rate-tunable variants modulate each constraint by an online estimate of how cooperative the neighbour appears.</p>
+</section>
+<section id="measurement-robust-cbfs-and-perception-in-the-loop" class="level3">
+<h3 class="anchored" data-anchor-id="measurement-robust-cbfs-and-perception-in-the-loop">7.7 Measurement-robust CBFs and perception in the loop</h3>
+<p>When <img src="https://latex.codecogs.com/png.latex?h"> is evaluated on a state estimate <img src="https://latex.codecogs.com/png.latex?%5Chat%20x"> produced by a learned perception module, the classical condition certifies nothing: the error <img src="https://latex.codecogs.com/png.latex?%5C%7Cx%20-%20%5Chat%20x%5C%7C"> enters both <img src="https://latex.codecogs.com/png.latex?%5Cnabla%20h"> and <img src="https://latex.codecogs.com/png.latex?%5Calpha(h)">. The <strong>measurement-robust CBF</strong> of Dean, Taylor, Cosner, Recht and Ames handles this by tightening the condition with terms that grow with the estimation error bound <img src="https://latex.codecogs.com/png.latex?%5Cvarepsilon(y)">:</p>
+<p><img src="https://latex.codecogs.com/png.latex?%5Csup_%7Bu%20%5Cin%20%5Cmathcal%7BU%7D%7D%20%5CBig%5B%20L_f%20h(%5Chat%20x)%20+%20L_g%20h(%5Chat%20x)%5C,u%20-%20%5Cbig(%20a(y)%20+%20b(y)%5C,%5C%7Cu%5C%7C_2%20%5Cbig)%20%5CBig%5D%20%5C;%5Cgeq%5C;%20-%5Calpha%5Cbig(h(%5Chat%20x)%5Cbig),"></p>
+<p>where <img src="https://latex.codecogs.com/png.latex?a"> absorbs the Lipschitz error in the drift and barrier terms and <img src="https://latex.codecogs.com/png.latex?b"> scales with the error in <img src="https://latex.codecogs.com/png.latex?L_g%20h">. Two features matter. The <img src="https://latex.codecogs.com/png.latex?%5C%7Cu%5C%7C"> term makes the constraint a <strong>second-order cone</strong> rather than a half-space, so the filter becomes an SOCP; and the original CBF condition is recovered exactly when the measurement is perfect. Their work also runs the argument backwards: the MR-CBF condition tells you how accurate a learned perception module has to be, and therefore how to sample training data for it. The follow-up unifies MR-CBFs with backup sets and demonstrates the result on a Segway using onboard stereo vision, where the plain CBF loses safety and the measurement-robust version keeps it.</p>
+<p>This area has moved quickly because perception-based autonomy demands it: recent work covers CBFs over neural radiance fields, safety filters conditioned on language, adaptive handling of out-of-distribution measurements, and attention-derived obstacle sets read directly out of a robot policy’s own internals (Section 8.6).</p>
+</section>
+<section id="beyond-state-constraints-time-logic-and-prediction" class="level3">
+<h3 class="anchored" data-anchor-id="beyond-state-constraints-time-logic-and-prediction">7.8 Beyond state constraints: time, logic, and prediction</h3>
+<p>Safety is not always a static set. Fixed-time and prescribed-time barriers encode <em>when</em> something must happen, not only what must be avoided; signal-temporal-logic CBFs compile temporal specifications into time-varying barriers; and predictive CBFs look ahead over a horizon before committing to an input, which repairs the myopia responsible for much deadlock and infeasibility. The bridge to model-predictive control is by now explicit in both directions: predictive safety filters can be read as CBFs, and discrete-time CBFs sit naturally inside MPC.</p>
+</section>
+</section>
+<section id="cbfs-with-reinforcement-learning-and-data-driven-control" class="level2">
+<h2 class="anchored" data-anchor-id="cbfs-with-reinforcement-learning-and-data-driven-control">8. CBFs with reinforcement learning and data-driven control</h2>
+<p>Two distinct problems get mixed together under this heading, and separating them is the single most useful move in reading this literature:</p>
+<ol type="1">
+<li><strong>Learning is the problem.</strong> An RL policy explores, and exploration on hardware breaks things. A CBF is used as a shield so that learning is survivable.</li>
+<li><strong>Learning is the solution.</strong> Designing <img src="https://latex.codecogs.com/png.latex?h"> (or the model it needs) by hand is the bottleneck. Data is used to synthesise the barrier itself.</li>
+</ol>
+<p>The first uses a CBF to protect learning; the second uses learning to obtain a CBF. Most practical systems now need both, which is why surveys of this area cover them together.</p>
+<section id="learning-the-safe-set" class="level3">
+<h3 class="anchored" data-anchor-id="learning-the-safe-set">8.1 Learning the safe set</h3>
+<p>The oldest data-driven route is supervised: sample states, label them safe or unsafe, and fit a smooth classifier whose decision function serves as a candidate barrier. With an RBF-kernel SVM the gradient is available in closed form, which is all the filter needs, and the learned zero level set recovers non-convex geometry that would be tedious to write down analytically.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/figs/fig10_svm_cbf.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 10.</strong> A barrier learned from 4000 labelled samples of a non-convex unsafe region (two discs and a bar). Left: labels and the learned zero level set. Middle: the learned <img src="https://latex.codecogs.com/png.latex?h_%5Ctheta"> field with the true obstacle boundaries dashed; the filtered trajectory threads the gap between the bar and the upper disc. Right: the learned barrier stays positive and the true clearance stays non-negative — but only just, because nothing in the fit created a margin between the learned level set and the real boundary.</figcaption>
+</figure>
+</div>
+<div class="warn">
+<p><span class="tag">THE CENTRAL CAVEAT</span></p>
+<p>A function whose zero level set matches the obstacle geometry is a learned <em>safe set</em>, not a control barrier function. The CBF property is the <em>descent condition</em> — that some admissible input can always arrest the decay of <img src="https://latex.codecogs.com/png.latex?h"> — and fitting labels never checks it. This is why neural-CBF work is inseparable from verification (Section 8.5), and why a learned <img src="https://latex.codecogs.com/png.latex?h"> that performs beautifully in simulation can fail on a system with tighter actuator limits than the training environment had.</p>
+</div>
+</section>
+<section id="learning-the-dynamics-the-barrier-needs" class="level3">
+<h3 class="anchored" data-anchor-id="learning-the-dynamics-the-barrier-needs">8.2 Learning the dynamics the barrier needs</h3>
+<p>The complementary route keeps a hand-designed <img src="https://latex.codecogs.com/png.latex?h"> and learns the model entering <img src="https://latex.codecogs.com/png.latex?L_f%20h"> and <img src="https://latex.codecogs.com/png.latex?L_g%20h">. Gaussian processes are the classical choice because they come with posterior uncertainty that can be folded straight into a robust condition: use the posterior mean in the constraint and subtract a multiple of the posterior standard deviation as a margin. As data accumulates the margin shrinks and the conservatism with it — the mechanism behind GP-based safe control and the model-learning half of RL-CBF. Variants include Gaussian CBFs that build <img src="https://latex.codecogs.com/png.latex?h"> itself non-parametrically from safety samples, Koopman-operator constructions that lift nonlinear dynamics into a space where the CBF constraint is affine, disturbance-observer-based robust CBFs that estimate the uncertainty pointwise rather than bounding it, and input-output data-driven CBFs built from a behavioural representation without identifying a state-space model at all.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/figs/fig11_gp_margin.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 11.</strong> Episodic GP learning of an unknown drift feeding a robust CBF. Episode 0 knows only a crude bound (<img src="https://latex.codecogs.com/png.latex?%5Cdelta%20=%200.8">), so the margin dominates and the robot is deflected away without reaching the goal. After one episode the margin drops to about <img src="https://latex.codecogs.com/png.latex?0.11"> and the task completes. Note episode 1, which briefly dips below <img src="https://latex.codecogs.com/png.latex?h%20=%200">: the GP is confident where it has no data, and a posterior standard deviation is not a high-probability bound. This is precisely why the literature uses RKHS or scenario bounds, an inflation factor, and a floor on the assumed uncertainty.</figcaption>
+</figure>
+</div>
+</section>
+<section id="filtering-reinforcement-learning" class="level3">
+<h3 class="anchored" data-anchor-id="filtering-reinforcement-learning">8.3 Filtering reinforcement learning</h3>
+<p>The oldest and still most common pattern: let the RL policy propose, and pass the proposal through a CBF-QP before it reaches the actuator. RL-CBF (Cheng, Orosz, Murray and Burdick) combined a model-free policy, a GP model of the unknown dynamics, and a CBF controller to maintain safety with high probability <em>throughout</em> learning while also guiding exploration by restricting the set of explorable policies; robust-CBF variants model the disturbance as a differential inclusion and place the resulting filter inside a SAC loop. The measured benefit is twofold and both halves matter: fewer violations, and better sample efficiency, because the agent stops wasting rollouts on regions it should never have visited.</p>
+<div class="quarto-figure quarto-figure-center">
+<figure class="figure">
+<p><img src="https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/figs/fig12_safe_rl.png" class="img-fluid figure-img"></p>
+<figcaption><strong>Figure 12.</strong> A small cross-entropy-method policy search on a 2-D navigation task, run twice with identical seeds and reward. Unfiltered exploration accumulates roughly 2600 unsafe steps over 25 iterations; with a closed-form CBF projection applied to every proposed action during training, that count is zero. The filtered run also reaches a good policy sooner (iteration 2 rather than 4) and settles at a slightly lower final return — the conservatism price, visible as the tighter path around the obstacles in the right panel.</figcaption>
+</figure>
+</div>
+</section>
+<section id="making-the-filter-part-of-the-policy" class="level3">
+<h3 class="anchored" data-anchor-id="making-the-filter-part-of-the-policy">8.4 Making the filter part of the policy</h3>
+<p>Pattern A below has a structural defect: the policy never learns that the filter exists. It keeps proposing inputs that get corrected, the critic is trained on actions the environment never executed, and the result is a policy that is safe only because something downstream cleans up after it. Three responses have emerged, and they are complementary rather than competing.</p>
+<div class="diagram"><svg viewbox="0 0 980 258" xmlns="http://www.w3.org/2000/svg" aria-label="Four ways to combine a control barrier function with reinforcement learning"><defs><marker id="ar2" markerwidth="8" markerheight="8" refx="6" refy="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#17222B"></path></marker></defs><g font-family="Iowan Old Style,Georgia,serif" fill="#17222B"><text x="14" y="20" font-size="13">A. filter at deployment</text><line x1="14" y1="28" x2="222" y2="28" stroke="#B9C5CC"></line><rect x="28" y="44" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="103" y="66" font-size="12.5" text-anchor="middle">policy</text><line x1="103" y1="78" x2="103" y2="94" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="28" y="96" width="150" height="34" fill="#EEF4F2" stroke="#1F6F5C"></rect><text x="103" y="118" font-size="12.5" text-anchor="middle">CBF-QP</text><line x1="103" y1="130" x2="103" y2="146" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="28" y="148" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="103" y="170" font-size="12.5" text-anchor="middle">plant</text><path d="M178,195 L192,195 L192,50 L180,50" fill="none" stroke="#B9C5CC" stroke-dasharray="4 3" marker-end="url(#ar2)"></path><text x="28" y="214" font-size="11.2" fill="#3c4c57">guarantee, no retraining; policy</text><text x="28" y="228" font-size="11.2" fill="#3c4c57">stays unaware, so it fights the</text><text x="28" y="242" font-size="11.2" fill="#3c4c57">filter</text><text x="252" y="20" font-size="13">B. filter during training</text><line x1="252" y1="28" x2="460" y2="28" stroke="#B9C5CC"></line><rect x="266" y="44" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="341" y="66" font-size="12.5" text-anchor="middle">policy</text><line x1="341" y1="78" x2="341" y2="94" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="266" y="96" width="150" height="34" fill="#EEF4F2" stroke="#1F6F5C"></rect><text x="341" y="118" font-size="12.5" text-anchor="middle">CBF-QP</text><line x1="341" y1="130" x2="341" y2="146" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="266" y="148" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="341" y="170" font-size="12.5" text-anchor="middle">plant</text><path d="M416,195 L430,195 L430,50 L418,50" fill="none" stroke="#B9C5CC" stroke-dasharray="4 3" marker-end="url(#ar2)"></path><text x="266" y="214" font-size="11.2" fill="#3c4c57">safe exploration; store the</text><text x="266" y="228" font-size="11.2" fill="#3c4c57">executed action or the critic</text><text x="266" y="242" font-size="11.2" fill="#3c4c57">learns the wrong policy</text><text x="490" y="20" font-size="13">C. filter inside the policy</text><line x1="490" y1="28" x2="698" y2="28" stroke="#B9C5CC"></line><rect x="504" y="44" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="579" y="66" font-size="12.5" text-anchor="middle">network</text><line x1="579" y1="78" x2="579" y2="94" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="504" y="96" width="150" height="34" fill="#EEF4F2" stroke="#1F6F5C"></rect><text x="579" y="118" font-size="12.5" text-anchor="middle">dCBF layer</text><line x1="579" y1="130" x2="579" y2="146" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="504" y="148" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="579" y="170" font-size="12.5" text-anchor="middle">plant</text><path d="M654,195 L668,195 L668,50 L656,50" fill="none" stroke="#B9C5CC" stroke-dasharray="4 3" marker-end="url(#ar2)"></path><text x="504" y="214" font-size="11.2" fill="#3c4c57">end-to-end gradients; class-K</text><text x="504" y="228" font-size="11.2" fill="#3c4c57">parameters become trainable</text><text x="728" y="20" font-size="13">D. barrier in the objective</text><line x1="728" y1="28" x2="936" y2="28" stroke="#B9C5CC"></line><rect x="742" y="44" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="817" y="66" font-size="12.5" text-anchor="middle">policy</text><line x1="817" y1="78" x2="817" y2="94" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="742" y="96" width="150" height="34" fill="#EEF4F2" stroke="#1F6F5C"></rect><text x="817" y="118" font-size="12.5" text-anchor="middle">reward + CBF term</text><line x1="817" y1="130" x2="817" y2="146" stroke="#17222B" marker-end="url(#ar2)"></line><rect x="742" y="148" width="150" height="34" fill="#fff" stroke="#B9C5CC"></rect><text x="817" y="170" font-size="12.5" text-anchor="middle">plant</text><path d="M892,195 L906,195 L906,50 L894,50" fill="none" stroke="#B9C5CC" stroke-dasharray="4 3" marker-end="url(#ar2)"></path><text x="742" y="214" font-size="11.2" fill="#3c4c57">no hard guarantee alone; reduces</text><text x="742" y="228" font-size="11.2" fill="#3c4c57">how often a hard filter must act</text></g></svg><div class="dcap">Four ways to combine a barrier with a learned policy. B and C fix the credit assignment problem in A from opposite directions — B by making the environment's transitions consistent with the filter, C by making the filter differentiable so gradients flow through it.</div></div>
+<p><strong>Differentiable CBF layers.</strong> BarrierNet embeds a differentiable higher-order CBF-QP as a trainable layer, so gradients flow through the safety projection and the class-<img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BK%7D"> parameters themselves become learnable — which directly attacks the conservativeness of fixed CBF parameters while keeping the guarantee. Related designs use the gauge map or a closed-form log-sum-exp solution to avoid differentiating through a QP solver at every training step, which is the main computational obstacle for multi-constraint problems.</p>
+<p><strong>Enforcing the CBF in training.</strong> The more recent shift is to apply the filter during training and then remove it: CBF-RL enforces barrier constraints in the training loop so the policy <em>internalises</em> them, biasing both actions and rewards toward safety, and reports deployment without any runtime filter — validated on a Unitree G1 humanoid avoiding obstacles and climbing stairs. This inverts the usual division of labour: the CBF becomes a training-time teacher rather than a runtime guard.</p>
+<p><strong>Barrier-shaped objectives.</strong> Penalising violation of the CBF inequality in the reward, or learning a neural barrier certificate jointly with the policy in a model-free loop, is cheaper and differentiable but provides no guarantee on its own. Treat it as a way to reduce how often a hard mechanism must intervene.</p>
+</section>
+<section id="neural-cbfs-and-why-verification-is-the-whole-game" class="level3">
+<h3 class="anchored" data-anchor-id="neural-cbfs-and-why-verification-is-the-whole-game">8.5 Neural CBFs and why verification is the whole game</h3>
+<p>Neural certificates scale to state dimensions where sum-of-squares programming and gridded Hamilton-Jacobi methods stop, and the training recipe is now standard: sample safe states, unsafe states, and interior states, then penalise sign violations on the first two and violation of the descent condition on the third. The supremum over a norm-bounded input set has a closed form, <img src="https://latex.codecogs.com/png.latex?%5Csup_%7B%5C%7Cu%5C%7C%20%5Cleq%20u_%7B%5Cmax%7D%7D%20L_g%20h%5C,u%20=%20u_%7B%5Cmax%7D%5C%7CL_g%20h%5C%7C">, so no inner optimisation is needed.</p>
+<p>Low training loss, however, is evidence about the sampled points and nothing more. The descent condition must hold on an uncountable set, so the field has converged on verification as an integral part of synthesis rather than an afterthought:</p>
+<ul>
+<li><strong>Exact methods</strong> for ReLU barriers via MILP/SMT encodings — complete, with exponential worst-case cost.</li>
+<li><strong>Bound propagation</strong> (the CROWN family) over the network and its Jacobian, including symbolic derivative bounds; sound and incomplete, but scalable, and the subject of continued work on scaling neural-CBF verification through linear bound propagation.</li>
+<li><strong>Verification in the loop</strong>, where branch-and-bound runs during training and counterexamples are fed back — the CEGIS pattern, which produces a network and its certificate together.</li>
+<li><strong>Stochastic and data-driven certification</strong>, giving probabilistic guarantees from finite samples for systems where a deterministic bound is unavailable.</li>
+</ul>
+</section>
+<section id="filtering-generative-and-foundation-model-policies" class="level3">
+<h3 class="anchored" data-anchor-id="filtering-generative-and-foundation-model-policies">8.6 Filtering generative and foundation-model policies</h3>
+<p>The newest and fastest-moving application is safety for large learned policies — diffusion planners and vision-language-action models — where the policy is far too complex to verify and a filter is the only practical mechanism. Work through 2025 and 2026 spans post-hoc projection of generated trajectories, barrier constraints embedded <em>inside</em> the denoising or flow-matching process so the whole generated action chunk is safe rather than just the next action, log-sum-exp aggregate barriers to keep the overhead of many constraints manageable, plug-and-play geometric safety layers, semantic shielding, language-conditioned safety filters, adaptive handling of out-of-distribution measurements, and training-free schemes that read the obstacle set out of a policy’s own attention maps at control rate. Benchmarks have appeared alongside them.</p>
+<div class="note">
+<p>Read these as engineering rather than as theory: the barrier usually lives in end-effector or Cartesian space with a simple geometric <img src="https://latex.codecogs.com/png.latex?h">, the model providing <img src="https://latex.codecogs.com/png.latex?L_gh"> is a kinematic approximation, and the guarantee is conditional on perception. That is still a decisive improvement over an unguarded policy, and it is currently where most of the applied activity is.</p>
+</div>
+</section>
+</section>
+<section id="a-checklist-for-deployment" class="level2">
+<h2 class="anchored" data-anchor-id="a-checklist-for-deployment">9. A checklist for deployment</h2>
+<p>Collecting the failure modes from Sections 5 and 8 into the order in which they tend to bite:</p>
+<ol type="1">
+<li><strong>Check the relative degree first.</strong> If <img src="https://latex.codecogs.com/png.latex?L_gh%20%5Cequiv%200"> the filter is decoration. Verify numerically that <img src="https://latex.codecogs.com/png.latex?%5C%7CL_gh%5C%7C"> is bounded away from zero on the operating set, or build the HOCBF chain.</li>
+<li><strong>Verify the initial state against every level of the chain.</strong> <img src="https://latex.codecogs.com/png.latex?h(x_0)%20%5Cgeq%200"> is not enough for an HOCBF; all <img src="https://latex.codecogs.com/png.latex?%5Cpsi_i(x_0)%20%5Cgeq%200"> are needed.</li>
+<li><strong>Put the real actuator limits in the QP</strong>, and test feasibility across the workspace offline rather than discovering infeasibility in flight. If constraints can conflict, decide in advance between an input-constrained construction, a backup set, soft-min aggregation, or slack with a logged penalty.</li>
+<li><strong>Add a sampled-data margin</strong> sized for the real control period, and confirm it with a simulation whose integration step is far smaller than the control step (Figure 8 is exactly this test).</li>
+<li><strong>Account for state-estimate error</strong> if <img src="https://latex.codecogs.com/png.latex?h"> reads perception: an MR-CBF term, and an SOCP solver to go with it.</li>
+<li><strong>Sweep the class-<img src="https://latex.codecogs.com/png.latex?%5Cmathcal%7BK%7D"> function</strong> and plot <img src="https://latex.codecogs.com/png.latex?%5Cmin_t%20h"> against intervention magnitude. Conservatism is a design choice, so choose it deliberately.</li>
+<li><strong>Hunt for deadlock in the intended workspace</strong>, including symmetric configurations, before trusting the loop. If found, fix the nominal controller, not the barrier.</li>
+<li><strong>Log the intervention rate in production.</strong> A filter that never activates is untested; one that activates constantly means the nominal controller and the barrier disagree about the task, and the safety margin is being spent continuously rather than held in reserve.</li>
+<li><strong>For anything learned, verify the descent condition</strong>, not just the sign of <img src="https://latex.codecogs.com/png.latex?h"> on a test set — and re-verify after every retraining and every change to the actuator limits.</li>
+</ol>
+</section>
+<section id="references" class="level2">
+<h2 class="anchored" data-anchor-id="references">10. References</h2>
+<section id="foundations-and-surveys" class="level3">
+<h3 class="anchored" data-anchor-id="foundations-and-surveys">Foundations and surveys</h3>
+<ol type="1">
+<li>A. D. Ames, X. Xu, J. W. Grizzle, P. Tabuada. <em>Control barrier function based quadratic programs for safety critical systems.</em> IEEE Trans. Automatic Control 62(8):3861–3876, 2017. — The reference statement of the theorem in Section 2.</li>
+<li>A. D. Ames, J. W. Grizzle, P. Tabuada. <em>Control barrier function based quadratic programs with application to adaptive cruise control.</em> IEEE CDC, 2014. — The ACC benchmark reproduced in Figure 4.</li>
+<li>A. D. Ames, S. Coogan, M. Egerstedt, G. Notomista, K. Sreenath, P. Tabuada. <em>Control barrier functions: theory and applications.</em> European Control Conference, 3420–3431, 2019.</li>
+<li>K.-C. Hsu, H. Hu, J. F. Fisac. <em>The safety filter: a unified view of safety-critical control in autonomous systems.</em> Annual Review of Control, Robotics, and Autonomous Systems 7:47–72, 2024. — Places CBFs, HJ reachability and predictive filters in one framework.</li>
+<li>K. Garg, J. Usevitch, J. Breeden, M. Black, D. Agrawal, H. Parwana, D. Panagou. <em>Advances in the theory of control barrier functions: addressing practical challenges in safe control synthesis for autonomous and robotic systems.</em> Annual Reviews in Control, 2024. arXiv:2312.16719.</li>
+<li>S. Zhao, Z. Yan, T. Huang, S. Wen. <em>A comprehensive review on control barrier functions: uncertainty handling, design optimization, and feasibility analysis.</em> IEEE Trans. Cybernetics 56(4):2061–2069, 2026. doi:10.1109/TCYB.2025.3633800.</li>
+<li><em>Safe control against uncertainty: a comprehensive review of control barrier function strategies.</em> IEEE, 2025 — IEEE Xplore document 10836828. Classifies uncertainty by learnability and transferability and surveys the techniques attached to each class.</li>
+<li>P. Panja, M. Rayguru, S. Baidya. <em>Survey paper on control barrier functions.</em> arXiv:2408.13271, 2024.</li>
+</ol>
+</section>
+<section id="relative-degree-discrete-time-feasibility" class="level3">
+<h3 class="anchored" data-anchor-id="relative-degree-discrete-time-feasibility">Relative degree, discrete time, feasibility</h3>
+<ol start="9" type="1">
+<li>W. Xiao, C. Belta. <em>High-order control barrier functions.</em> IEEE Trans. Automatic Control 67(7):3655–3662, 2022.</li>
+<li>Q. Nguyen, K. Sreenath. <em>Exponential control barrier functions for enforcing high relative-degree safety-critical constraints.</em> ACC, 2016.</li>
+<li>Y. Xiong, D.-H. Zhai, M. Tavakoli, Y. Xia. <em>Discrete-time control barrier function: high-order case and adaptive case.</em> IEEE Trans. Cybernetics, 2022.</li>
+<li>J. Zeng, B. Zhang, K. Sreenath. <em>Safety-critical model predictive control with discrete-time control barrier function.</em> ACC, 2021.</li>
+<li>D. R. Agrawal, D. Panagou. <em>Safe control synthesis via input constrained control barrier functions.</em> IEEE CDC, 2021.</li>
+<li>T. Gurriet, A. Singletary, et al.&nbsp;<em>Towards a framework for realizable safety critical control through active set invariance</em> / backup-set CBFs. ICCPS, 2018; and closed-form backup CBF solutions, arXiv:2510.05436, 2025.</li>
+<li>P. Rabiee, J. B. Hoagg. <em>Soft-minimum and soft-maximum barrier functions for safety with actuation constraints.</em> Automatica 171:111921, 2025.</li>
+<li>X. Tan, D. V. Dimarogonas. <em>On the undesired equilibria induced by control barrier function based quadratic programs.</em> Automatica 159:111359, 2024.</li>
+<li>P. Mestres, Y. Chen, E. Dall’Anese, J. Cortés. <em>Control barrier function-based safety filters: characterization of undesired equilibria, unbounded trajectories, and limit cycles.</em> Journal of Nonlinear Science 36:41, 2026. doi:10.1007/s00332-026-10255-x.</li>
+<li>M. F. Reis, J. P. Carvalho, A. P. Aguiar. <em>A unified stability analysis of safety-critical control using multiple control barrier functions.</em> arXiv:2503.15823, 2025.</li>
+<li><em>Explicit control barrier function-based safety filters and their resource-aware computation.</em> arXiv:2512.10118, 2025/26.</li>
+</ol>
+</section>
+<section id="uncertainty-robustness-perception" class="level3">
+<h3 class="anchored" data-anchor-id="uncertainty-robustness-perception">Uncertainty, robustness, perception</h3>
+<ol start="20" type="1">
+<li>X. Xu, P. Tabuada, J. W. Grizzle, A. D. Ames. <em>Robustness of control barrier functions for safety critical control.</em> IFAC-PapersOnLine 48(27):54–61, 2015.</li>
+<li>S. Kolathaya, A. D. Ames. <em>Input-to-state safety with control barrier functions.</em> IEEE Control Systems Letters 3(1):108–113, 2019.</li>
+<li>A. Alan, A. J. Taylor, C. R. He, A. D. Ames, G. Orosz. <em>Control barrier functions and input-to-state safety with application to automated vehicles.</em> IEEE Trans. Control Systems Technology 31(6):2744–2759, 2023.</li>
+<li>S. Dean, A. J. Taylor, R. K. Cosner, B. Recht, A. D. Ames. <em>Guaranteeing safety of learned perception modules via measurement-robust control barrier functions.</em> CoRL, PMLR 155:654–670, 2021. arXiv:2010.16001.</li>
+<li>R. K. Cosner, A. W. Singletary, A. J. Taylor, T. G. Molnar, K. L. Bouman, A. D. Ames. <em>Measurement-robust control barrier functions: certainty in safety with uncertainty in state.</em> IROS, 2021. arXiv:2104.14030.</li>
+<li>M. Black, G. Fainekos, B. Hoxha, D. Prokhorov, D. Panagou. <em>Safety under uncertainty: tight bounds with risk-aware control barrier functions.</em> ICRA, 12686–12692, 2023.</li>
+<li>A. Clark. <em>Control barrier functions for complete and incomplete information stochastic systems.</em> ACC, 2019; and <em>Verification and synthesis of control barrier functions</em>, CDC, 2021.</li>
+<li>W. Xiao, C. Belta, C. G. Cassandras. <em>Adaptive control barrier functions.</em> IEEE Trans. Automatic Control 67(5):2267–2281, 2022.</li>
+<li>K. P. Wabersich, M. N. Zeilinger. <em>Predictive control barrier functions: enhanced safety mechanisms for learning-based control.</em> arXiv:2105.10241; and <em>A predictive safety filter for learning-based control of constrained nonlinear dynamical systems</em>, Automatica 129:109597, 2021.</li>
+</ol>
+</section>
+<section id="multi-agent-and-graph-cbfs-1" class="level3">
+<h3 class="anchored" data-anchor-id="multi-agent-and-graph-cbfs-1">Multi-agent and graph CBFs</h3>
+<ol start="29" type="1">
+<li>L. Wang, A. D. Ames, M. Egerstedt. <em>Safety barrier certificates for collisions-free multirobot systems.</em> IEEE Trans. Robotics 33(3):661–674, 2017.</li>
+<li>S. Zhang, O. So, K. Garg, C. Fan. <em>GCBF+: a neural graph control barrier function framework for distributed safe multiagent control.</em> IEEE Trans. Robotics 41:1533–1552, 2025. doi:10.1109/TRO.2025.3530348. Code: github.com/MIT-REALM/gcbfplus.</li>
+<li>Z. Qin, K. Zhang, Y. Chen, J. Chen, C. Fan. <em>Learning safe multi-agent control with decentralized neural barrier certificates.</em> ICLR, 2021.</li>
+<li>J. Usevitch, D. Panagou. <em>Adversarial resilience for sampled-data systems using control barrier function methods.</em> ACC, 2021.</li>
+<li>H. Parwana, A. Mustafa, D. Panagou. <em>Trust-based rate-tunable control barrier functions for non-cooperative multi-agent systems.</em> CDC, 2022.</li>
+</ol>
+</section>
+<section id="learning-rl-and-verification" class="level3">
+<h3 class="anchored" data-anchor-id="learning-rl-and-verification">Learning, RL, and verification</h3>
+<ol start="34" type="1">
+<li>R. Cheng, G. Orosz, R. M. Murray, J. W. Burdick. <em>End-to-end safe reinforcement learning through barrier functions for safety-critical continuous control tasks.</em> AAAI 33:3387–3395, 2019. arXiv:1903.08792.</li>
+<li>Y. Emam, G. Notomista, P. Glotfelter, Z. Kira, M. Egerstedt. <em>Safe reinforcement learning using robust control barrier functions.</em> arXiv:2110.05415, 2022.</li>
+<li>M. Guerrier et al.&nbsp;<em>Learning control barrier functions and their application in reinforcement learning: a survey.</em> arXiv:2404.16879, 2024.</li>
+<li>C. Dawson, S. Gao, C. Fan. <em>Safe control with learned certificates: a survey of neural Lyapunov, barrier, and contraction methods for robotics and control.</em> IEEE Trans. Robotics 39(3):1749–1767, 2023.</li>
+<li>W. Xiao, T.-H. Wang, R. Hasani, M. Chahine, A. Amini, X. Li, D. Rus. <em>BarrierNet: differentiable control barrier functions for learning of safe robot control.</em> IEEE Trans. Robotics, 2023. doi:10.1109/TRO.2023.3249564. Earlier version arXiv:2111.11277.</li>
+<li>L. Yang, B. Werner, M. de Sa, A. D. Ames. <em>CBF-RL: safety filtering reinforcement learning in training with control barrier functions.</em> arXiv:2510.14959, 2025 (rev. 2026). Humanoid hardware results on the Unitree G1.</li>
+<li>Y. Yang, Y. Jiang, Y. Liu, J. Chen, S. E. Li. <em>Model-free safe reinforcement learning through neural barrier certificate.</em> IEEE Robotics and Automation Letters 8(3):1295–1302, 2023.</li>
+<li>M. Srinivasan, A. Dabholkar, S. Coogan, P. A. Vela. <em>Synthesis of control barrier functions using a supervised machine learning approach.</em> IROS, 7139–7145, 2020. — The labelled-sample route used in Figure 10.</li>
+<li>P. Jagtap, G. J. Pappas, M. Zamani. <em>Control barrier functions for unknown nonlinear systems using Gaussian processes.</em> IEEE CDC, 2020.</li>
+<li>V. Dhiman, M. J. Khojasteh, M. Franceschetti, N. Atanasov. <em>Control barriers in Bayesian learning of system dynamics.</em> IEEE Trans. Automatic Control, 2023; and <em>Gaussian control barrier functions: a non-parametric paradigm to safety</em>, arXiv:2203.15474.</li>
+<li>C. Folkestad, Y. Chen, A. D. Ames, J. W. Burdick. <em>Data-driven safety-critical control: synthesizing control barrier functions with Koopman operators.</em> IEEE Control Systems Letters 5(6):2012–2017, 2021.</li>
+<li>H. Zhang, J. Wu, Y. Vorobeychik, A. Clark. <em>Exact verification of ReLU neural control barrier functions.</em> NeurIPS 36:5685–5705, 2023.</li>
+<li>H. Hu, Y. Yang, T. Wei, C. Liu. <em>Verification of neural control barrier functions with symbolic derivative bounds propagation.</em> CoRL, PMLR 270:1797–1814, 2024.</li>
+<li>X. Wang, L. Knoedler, F. B. Mathiesen, J. Alonso-Mora. <em>Simultaneous synthesis and verification of neural control barrier functions through branch-and-bound verification-in-the-loop training.</em> ECC, 571–578, 2024.</li>
+<li>A. Abate, D. Ahmed, A. Edwards, M. Giacobbe, A. Peruffo. <em>FOSSIL: a software tool for the formal synthesis of Lyapunov functions and barrier certificates using neural networks.</em> HSCC, 2021.</li>
+<li>A. Salamati, A. Lavaei, S. Soudjani, M. Zamani. <em>Data-driven verification and synthesis of stochastic systems via barrier certificates.</em> Automatica 159:111323, 2024.</li>
+<li>O. So, Z. Serlin, M. Mann, J. Gonzales, K. Rutledge, N. Roy, C. Fan. <em>How to train your neural control barrier function: learning safety filters for complex input-constrained systems.</em> ICRA, 2024.</li>
+</ol>
+</section>
+<section id="generative-and-foundation-model-policies-20252026" class="level3">
+<h3 class="anchored" data-anchor-id="generative-and-foundation-model-policies-20252026">Generative and foundation-model policies (2025–2026)</h3>
+<ol start="51" type="1">
+<li>W. Xiao, T.-H. Wang, C. Gan, D. Rus. <em>SafeDiffuser: safe planning with diffusion probabilistic models.</em> 2023/24 — barrier constraints inside the denoising process.</li>
+<li>K. Mizuta et al.&nbsp;<em>CoBL-Diffusion</em> — CBF-constrained diffusion planning.</li>
+<li>S. Hu, Z. Liu, S. Liu, J. Cen, Z. Meng, X. He. <em>VLSA: vision-language-action models with a plug-and-play safety constraint layer.</em> arXiv:2512.11891, 2025.</li>
+<li>Z. Feng, H. Zhang, S. Bansal. <em>From words to safety: language-conditioned safety filtering for robot navigation.</em> arXiv:2511.05889, 2025.</li>
+<li><em>ATOM-CBF: adaptive safe perception-based control under out-of-distribution measurements.</em> arXiv:2511.08741, 2025.</li>
+<li><em>Your model already knows: attention-guided safety filter for vision-language-action models.</em> arXiv:2606.09749, 2026.</li>
+<li><em>Safe vision-language-action models via barrier-enhanced flow matching.</em> arXiv:2607.29569, 2026 — log-sum-exp aggregate barriers over action chunks.</li>
+<li><em>LIBERO-Safety: a benchmark for physical and semantic safety in vision-language-action models.</em> arXiv:2606.23686, 2026.</li>
+</ol>
+<div class="note">
+<p>Bibliographic note: entries were checked against publisher or arXiv records where possible. A few 2026 preprints are cited by arXiv identifier because no journal version exists yet; for those, check for an updated version before citing them in your own work.</p>
+</div>
+
+
+</section>
+</section>
+
+ ]]></description>
+  <category>Control theory</category>
+  <guid>https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/</guid>
+  <pubDate>Sun, 04 Oct 2026 18:30:00 GMT</pubDate>
+  <media:content url="https://anjalit15.github.io/blog/posts/2026-10-05-control-barrier-functions/figs/fig03_cbf_qp_filter.png" medium="image" type="image/png" height="69" width="144"/>
+</item>
 <item>
   <title>Convenience Store Woman: A Life That Fits, Even When It Doesn’t Fit In</title>
   <dc:creator>Anjali </dc:creator>
